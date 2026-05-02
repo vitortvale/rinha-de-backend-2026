@@ -66,12 +66,12 @@ let convert input_path vectors_path labels_path =
       let count = loop 0 0 in
       eprintf "converted %d references\n%!" count))
 
-let command =
-  Command.basic
-    ~summary:"Convert references JSON into packed u16 vectors and u8 labels"
-    (let%map_open.Command input_path = anon ("references-json" %: string)
-     and vectors_path = anon ("references-u16" %: string)
-     and labels_path = anon ("labels-u8" %: string) in
-     fun () -> convert input_path vectors_path labels_path)
-
-let () = Command_unix.run command
+let () =
+  match Sys.get_argv () |> Array.to_list with
+  | [ _; input_path; vectors_path; labels_path ] ->
+    convert input_path vectors_path labels_path
+  | argv ->
+    eprintf
+      "usage: %s references.json references.u16 labels.u8\n%!"
+      (List.hd argv |> Option.value ~default:"convert_references");
+    exit 2
