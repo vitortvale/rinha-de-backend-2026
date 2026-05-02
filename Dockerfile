@@ -2,7 +2,7 @@ FROM ocaml/opam:debian-12-ocaml-5.2 AS build
 
 USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 zlib1g-dev libev-dev m4 pkg-config ca-certificates autoconf automake libtool make gcc git \
+ && apt-get install -y --no-install-recommends zlib1g-dev libev-dev m4 pkg-config ca-certificates autoconf automake libtool make gcc git gzip \
  && rm -rf /var/lib/apt/lists/*
 
 USER opam
@@ -21,12 +21,13 @@ RUN eval $(opam env --switch=5.2.0+ox) \
 
 COPY --chown=opam:opam dune-project rinha_2026_ocaml.opam ./
 COPY --chown=opam:opam src ./src
-COPY --chown=opam:opam tools ./tools
 COPY --chown=opam:opam resources ./resources
 
 RUN eval $(opam env --switch=5.2.0+ox) \
  && dune build --profile release @install \
- && python3 tools/convert_references.py resources/references.json.gz /tmp/references.u16 /tmp/labels.u8
+ && gzip -cd resources/references.json.gz > /tmp/references.json \
+ && _build/install/default/bin/convert_references /tmp/references.json /tmp/references.u16 /tmp/labels.u8 \
+ && rm /tmp/references.json
 
 FROM debian:12-slim AS runtime
 

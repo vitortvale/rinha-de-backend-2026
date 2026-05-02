@@ -8,3 +8,9 @@
  (name main)
  (modules main)
  (libraries rinha_lib core async unix))
+
+(executable
+ (public_name convert_references)
+ (name convert_references)
+ (modules convert_references)
+ (libraries core unix))
