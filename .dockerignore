@@ -1,0 +1,6 @@
+.git
+_build
+*.tar
+*.u16
+*.u8
+.DS_Store

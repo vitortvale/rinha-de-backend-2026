@@ -1,0 +1,15 @@
+_build/
+*.install
+*.tar
+*.u16
+*.u8
+
+# Local contest/spec checkout and generated C++ data from previous experiments.
+specs/
+data/
+.gitmodules
+AGENTS.md
+AGENT_LOG.md
+CPU.md
+PERFORMANCE_NOTES.md
+TESTING.md

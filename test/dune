@@ -1,0 +1,4 @@
+(test
+ (name test_vectorize)
+ (deps (source_tree ../resources))
+ (libraries rinha_lib core unix))

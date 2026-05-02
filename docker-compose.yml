@@ -1,0 +1,45 @@
+services:
+  haproxy:
+    image: haproxy:2.9-alpine
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
+      - sockets:/sockets
+    depends_on:
+      - api1
+      - api2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: "32MB"
+
+  api1:
+    build: .
+    environment:
+      SOCKET_PATH: "/sockets/api1.sock"
+      DATA_DIR: "/app/data"
+    volumes:
+      - sockets:/sockets
+    deploy:
+      resources:
+        limits:
+          cpus: "0.45"
+          memory: "159MB"
+
+  api2:
+    build: .
+    environment:
+      SOCKET_PATH: "/sockets/api2.sock"
+      DATA_DIR: "/app/data"
+    volumes:
+      - sockets:/sockets
+    deploy:
+      resources:
+        limits:
+          cpus: "0.45"
+          memory: "159MB"
+
+volumes:
+  sockets:
