@@ -1,0 +1,7 @@
+{
+  "participants": ["vitortvale"],
+  "social": ["https://github.com/vitortvale"],
+  "source-code-repo": "https://github.com/vitortvale/rinha-de-backend-2026",
+  "stack": ["ocaml", "oxcaml", "jane-street-async", "haproxy"],
+  "open_to_work": false
+}
