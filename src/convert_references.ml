@@ -11,6 +11,15 @@ let write_u16_le output value =
   Out_channel.output_char output (Char.of_int_exn (value land 0xff));
   Out_channel.output_char output (Char.of_int_exn ((value lsr 8) land 0xff))
 
+let has_prefix_at s pos prefix =
+  let prefix_len = String.length prefix in
+  pos + prefix_len <= String.length s
+  &&
+  let rec loop i =
+    i = prefix_len || (Char.equal s.[pos + i] prefix.[i] && loop (i + 1))
+  in
+  loop 0
+
 let parse_float_at s i =
   let len = String.length s in
   let rec loop j =
@@ -49,7 +58,7 @@ let convert input_path vectors_path labels_path =
               then failwithf "bad vector separator at row %d dim %d" count dim_index ();
               incr pos)
           done;
-          if not (String.is_prefix (String.drop_prefix input !pos) ~prefix:label_marker)
+          if not (has_prefix_at input !pos label_marker)
           then failwithf "bad label marker at row %d" count ();
           pos := !pos + String.length label_marker;
           let fraud =
