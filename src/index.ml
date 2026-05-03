@@ -26,26 +26,34 @@ let load data_dir =
   ; rows
   }
 
+let rec distance_until vectors query base limit dim acc =
+  if dim = Vectorize.dim || acc >= limit
+  then acc
+  else (
+    let diff = query.(dim) - A1.unsafe_get vectors (base + dim) in
+    distance_until vectors query base limit (dim + 1) (acc + (diff * diff)))
+
 let score t query =
   let best_dist = Array.create ~len:5 Int.max_value in
   let best_label = Array.create ~len:5 0 in
   for row = 0 to t.rows - 1 do
     let base = row * Vectorize.dim in
-    let dist = ref 0 in
-    for dim = 0 to Vectorize.dim - 1 do
-      let diff = query.(dim) - A1.unsafe_get t.vectors (base + dim) in
-      dist := !dist + (diff * diff)
-    done;
-    if !dist < best_dist.(4)
+    let dist = distance_until t.vectors query base best_dist.(4) 0 0 in
+    if dist < best_dist.(4)
     then (
-      let pos = ref 4 in
-      while !pos > 0 && !dist < best_dist.(!pos - 1) do
-        best_dist.(!pos) <- best_dist.(!pos - 1);
-        best_label.(!pos) <- best_label.(!pos - 1);
-        decr pos
-      done;
-      best_dist.(!pos) <- !dist;
-      best_label.(!pos) <- A1.unsafe_get t.labels row)
+      let rec insertion_pos pos =
+        if pos > 0 && dist < best_dist.(pos - 1)
+        then (
+          best_dist.(pos) <- best_dist.(pos - 1);
+          best_label.(pos) <- best_label.(pos - 1);
+          insertion_pos (pos - 1))
+        else pos
+      in
+      let pos = insertion_pos 4 in
+      best_dist.(pos) <- dist;
+      best_label.(pos) <- A1.unsafe_get t.labels row)
   done;
-  let frauds = Array.fold best_label ~init:0 ~f:( + ) in
+  let frauds =
+    best_label.(0) + best_label.(1) + best_label.(2) + best_label.(3) + best_label.(4)
+  in
   Float.of_int frauds /. 5.
