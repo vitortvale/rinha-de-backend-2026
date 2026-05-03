@@ -75,7 +75,6 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ env.BUILDER_IMAGE_NAME }}:latest
-            ${{ env.DOCKERHUB_USERNAME }}/${{ env.BUILDER_IMAGE_NAME }}:${{ github.sha }}
 
   publish:
     name: Build and push
@@ -110,4 +109,3 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
