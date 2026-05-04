@@ -1,6 +1,7 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:latest
+    image: vitortvale/rinha-2026-ocaml:a83d516
+    pull_policy: always
     hostname: api1
     environment:
       SOCKET_PATH: /sockets/api1.sock
