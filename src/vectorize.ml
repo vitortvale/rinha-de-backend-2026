@@ -9,33 +9,68 @@ let clamp x =
 let quantize x =
   Int.clamp_exn (Float.iround_nearest_exn ((x +. 1.) *. scale)) ~min:0 ~max:65535
 
+let amount config tx = clamp (tx.Runtime_json.amount /. config.Config.max_amount)
+
+let installments config tx =
+  clamp (Float.of_int tx.Runtime_json.installments /. config.Config.max_installments)
+
+let amount_vs_average config tx =
+  clamp
+    ((tx.Runtime_json.amount /. Float.max tx.customer_avg_amount 0.000001)
+     /. config.Config.amount_vs_avg_ratio)
+
+let requested_hour _config tx =
+  Float.of_int (Time_util.hour tx.Runtime_json.requested_at) /. 23.
+
+let requested_day_of_week _config tx =
+  Float.of_int (Time_util.day_of_week tx.Runtime_json.requested_at) /. 6.
+
+let minutes_since_last_transaction config tx =
+  match tx.Runtime_json.last_transaction with
+  | Missing -> -1.
+  | Present last ->
+    let minutes =
+      Time_util.epoch_minutes tx.requested_at - Time_util.epoch_minutes last.timestamp
+    in
+    clamp (Float.of_int minutes /. config.Config.max_minutes)
+
+let km_from_last_transaction config tx =
+  match tx.Runtime_json.last_transaction with
+  | Missing -> -1.
+  | Present last -> clamp (last.km_from_current /. config.Config.max_km)
+
+let km_from_home config tx =
+  clamp (tx.Runtime_json.km_from_home /. config.Config.max_km)
+
+let tx_count_24h config tx =
+  clamp
+    (Float.of_int tx.Runtime_json.tx_count_24h /. config.Config.max_tx_count_24h)
+
+let is_online _config tx = if tx.Runtime_json.is_online then 1. else 0.
+let card_present _config tx = if tx.Runtime_json.card_present then 1. else 0.
+let unknown_merchant _config tx = if tx.Runtime_json.known_merchant then 0. else 1.
+
+let mcc_risk config tx = Config.mcc_risk config tx.Runtime_json.merchant_mcc
+
+let merchant_average_amount config tx =
+  clamp (tx.Runtime_json.merchant_avg_amount /. config.Config.max_merchant_avg_amount)
+
 let to_float_array config tx =
-  let vector = Array.create ~len:dim 0. in
-  vector.(0) <- clamp (tx.Runtime_json.amount /. config.Config.max_amount);
-  vector.(1) <- clamp (Float.of_int tx.installments /. config.max_installments);
-  vector.(2)
-  <- clamp
-       ((tx.amount /. Float.max tx.customer_avg_amount 0.000001) /. config.amount_vs_avg_ratio);
-  vector.(3) <- Float.of_int (Time_util.hour tx.requested_at) /. 23.;
-  vector.(4) <- Float.of_int (Time_util.day_of_week tx.requested_at) /. 6.;
-  (match tx.last_transaction with
-   | Runtime_json.Missing ->
-     vector.(5) <- -1.;
-     vector.(6) <- -1.
-   | Runtime_json.Present last ->
-     let minutes =
-       Time_util.epoch_minutes tx.requested_at - Time_util.epoch_minutes last.timestamp
-     in
-     vector.(5) <- clamp (Float.of_int minutes /. config.max_minutes);
-     vector.(6) <- clamp (last.km_from_current /. config.max_km));
-  vector.(7) <- clamp (tx.km_from_home /. config.max_km);
-  vector.(8) <- clamp (Float.of_int tx.tx_count_24h /. config.max_tx_count_24h);
-  vector.(9) <- (if tx.is_online then 1. else 0.);
-  vector.(10) <- (if tx.card_present then 1. else 0.);
-  vector.(11) <- (if tx.known_merchant then 0. else 1.);
-  vector.(12) <- Config.mcc_risk config tx.merchant_mcc;
-  vector.(13) <- clamp (tx.merchant_avg_amount /. config.max_merchant_avg_amount);
-  vector
+  [| amount config tx
+   ; installments config tx
+   ; amount_vs_average config tx
+   ; requested_hour config tx
+   ; requested_day_of_week config tx
+   ; minutes_since_last_transaction config tx
+   ; km_from_last_transaction config tx
+   ; km_from_home config tx
+   ; tx_count_24h config tx
+   ; is_online config tx
+   ; card_present config tx
+   ; unknown_merchant config tx
+   ; mcc_risk config tx
+   ; merchant_average_amount config tx
+  |]
 
 let to_quantized config body =
   Runtime_json.parse body |> to_float_array config |> Array.map ~f:quantize
