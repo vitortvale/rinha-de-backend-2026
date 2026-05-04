@@ -2,7 +2,7 @@ FROM vitortvale/rinha-2026-ocaml-builder:latest AS build
 
 WORKDIR /src
 
-COPY --chown=opam:opam dune-project rinha_2026_ocaml.opam ./
+COPY --chown=opam:opam dune dune-project rinha_2026_ocaml.opam ./
 COPY --chown=opam:opam src ./src
 COPY --chown=opam:opam resources ./resources
 

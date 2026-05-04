@@ -1,0 +1,18 @@
+(subdir
+ src
+ (library
+  (name rinha_lib)
+  (libraries core async unix)
+  (modules config runtime_json time_util vectorize index))
+
+ (executable
+  (public_name rinha_api)
+  (name main)
+  (modules main)
+  (libraries rinha_lib core async unix))
+
+ (executable
+  (public_name convert_references)
+  (name convert_references)
+  (modules convert_references)
+  (libraries core unix)))
