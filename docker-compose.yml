@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:4660342
+    image: vitortvale/rinha-2026-ocaml:75db084
     pull_policy: always
     hostname: api1
     environment:
@@ -19,6 +19,12 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+    healthcheck:
+      test: [ "CMD", "/app/rinha_healthcheck" ]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+      start_period: 1s
 
   api2:
     <<: *api
@@ -46,8 +52,10 @@ services:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - api-sockets:/sockets
     depends_on:
-      - api1
-      - api2
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
     networks:
       - rinha
     deploy:
