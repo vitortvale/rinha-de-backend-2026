@@ -171,6 +171,28 @@ let add_candidate t query best_dist best_label best_tau row =
   let dist = row_distance t query row best_dist.(k - 1) in
   add_candidate_dist t best_dist best_label best_tau row dist
 
+let prewarm t =
+  let checksum = ref 0 in
+  for base = 0 to (reference_rows - 1) * Vectorize.dim do
+    checksum := !checksum + A1.unsafe_get t.vectors base
+  done;
+  for row = 0 to reference_rows - 1 do
+    checksum := !checksum + A1.unsafe_get t.labels row + i32_get t.rows row
+  done;
+  for node = 0 to t.node_count - 1 do
+    checksum
+    := !checksum
+       + A1.unsafe_get t.kinds node
+       + i32_get t.pivots node
+       + i32_get t.lefts node
+       + i32_get t.rights node
+       + i32_get t.starts node
+       + i32_get t.counts node
+       + Int.of_float t.radii.(node)
+  done;
+  Sys.opaque_identity !checksum |> ignore;
+  ()
+
 let score_frauds t query =
   let best_dist = Array.create ~len:k Int.max_value in
   let best_label = Array.create ~len:k 0 in

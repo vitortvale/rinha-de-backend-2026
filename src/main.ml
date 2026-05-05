@@ -33,6 +33,14 @@ let fraud_responses =
     let score = Float.of_int frauds /. Float.of_int Index.k in
     static_response 200 "OK" ~content_type:"application/json" (response_json score))
 
+let ensure_warmed =
+  let warmed = ref false in
+  fun index ->
+    if not !warmed
+    then (
+      Index.prewarm index;
+      warmed := true)
+
 let parse_request_line line =
   match String.split line ~on:' ' with
   | meth :: path :: _ -> meth, path
@@ -88,9 +96,11 @@ let handle_request config index reader writer =
      | Some body ->
        (match request.meth, request.path with
         | "GET", "/ready" ->
+          ensure_warmed index;
           write_and_close writer ready_response
         | "POST", "/fraud-score" ->
           (try
+            ensure_warmed index;
             let query = Vectorize.to_quantized config body in
             let frauds = Index.score_frauds index query in
             write_and_close writer fraud_responses.(frauds)

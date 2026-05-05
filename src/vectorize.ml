@@ -73,4 +73,19 @@ let to_float_array config tx =
   |]
 
 let to_quantized config body =
-  Runtime_json.parse body |> to_float_array config |> Array.map ~f:quantize
+  let tx = Runtime_json.parse body in
+  [| quantize (amount config tx)
+   ; quantize (installments config tx)
+   ; quantize (amount_vs_average config tx)
+   ; quantize (requested_hour config tx)
+   ; quantize (requested_day_of_week config tx)
+   ; quantize (minutes_since_last_transaction config tx)
+   ; quantize (km_from_last_transaction config tx)
+   ; quantize (km_from_home config tx)
+   ; quantize (tx_count_24h config tx)
+   ; quantize (is_online config tx)
+   ; quantize (card_present config tx)
+   ; quantize (unknown_merchant config tx)
+   ; quantize (mcc_risk config tx)
+   ; quantize (merchant_average_amount config tx)
+  |]
