@@ -7,14 +7,14 @@ open Core
 type t =
   { vectors : (int, BA.int16_unsigned_elt, BA.c_layout) A1.t
   ; labels : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; rows : int array
+  ; rows : (int32, BA.int32_elt, BA.c_layout) A1.t
   ; kinds : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; pivots : int array
+  ; pivots : (int32, BA.int32_elt, BA.c_layout) A1.t
   ; radii : float array
-  ; lefts : int array
-  ; rights : int array
-  ; starts : int array
-  ; counts : int array
+  ; lefts : (int32, BA.int32_elt, BA.c_layout) A1.t
+  ; rights : (int32, BA.int32_elt, BA.c_layout) A1.t
+  ; starts : (int32, BA.int32_elt, BA.c_layout) A1.t
+  ; counts : (int32, BA.int32_elt, BA.c_layout) A1.t
   ; node_count : int
   }
 
@@ -39,12 +39,8 @@ let map_file path kind len =
   BA.array1_of_genarray mapped
 
 let map_i32 path len = map_file path BA.int32 len
-let i32_get a i = A1.unsafe_get a i |> Int32.to_int_exn
+let i32_get a i = A1.unsafe_get a i |> Stdlib.Int32.to_int
 let i64_get a i = A1.unsafe_get a i |> Int64.to_int_exn
-let i32_array path len =
-  let mapped = map_i32 path len in
-  Array.init len ~f:(fun i -> i32_get mapped i)
-
 let load data_dir =
   let vectors_path = Filename.concat data_dir "references.u16" in
   let labels_path = Filename.concat data_dir "labels.u8" in
@@ -66,17 +62,21 @@ let load data_dir =
   validate_size right_path (node_count * 4);
   validate_size start_path (node_count * 4);
   validate_size count_path (node_count * 4);
-  let radii_raw = map_file radius_path BA.int64 node_count in
+  let radii =
+    let radii_raw = map_file radius_path BA.int64 node_count in
+    Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
+  in
+  Gc.full_major ();
   { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
   ; labels = map_file labels_path BA.int8_unsigned reference_rows
-  ; rows = i32_array rows_path reference_rows
+  ; rows = map_i32 rows_path reference_rows
   ; kinds = map_file kind_path BA.int8_unsigned node_count
-  ; pivots = i32_array pivot_path node_count
-  ; radii = Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
-  ; lefts = i32_array left_path node_count
-  ; rights = i32_array right_path node_count
-  ; starts = i32_array start_path node_count
-  ; counts = i32_array count_path node_count
+  ; pivots = map_i32 pivot_path node_count
+  ; radii
+  ; lefts = map_i32 left_path node_count
+  ; rights = map_i32 right_path node_count
+  ; starts = map_i32 start_path node_count
+  ; counts = map_i32 count_path node_count
   ; node_count
   }
 
@@ -180,19 +180,19 @@ let score_frauds t query =
     then (
       match A1.unsafe_get t.kinds node with
       | 0 ->
-        let start = t.starts.(node) in
-        let count = t.counts.(node) in
+        let start = i32_get t.starts node in
+        let count = i32_get t.counts node in
         for pos = start to start + count - 1 do
-          add_candidate t query best_dist best_label best_tau t.rows.(pos)
+          add_candidate t query best_dist best_label best_tau (i32_get t.rows pos)
         done
       | _ ->
-        let pivot = t.pivots.(node) in
+        let pivot = i32_get t.pivots node in
         let dist_sq = row_distance t query pivot Int.max_value in
         add_candidate_dist t best_dist best_label best_tau pivot dist_sq;
         let dist = Float.sqrt (Float.of_int dist_sq) in
         let radius = t.radii.(node) in
-        let left = t.lefts.(node) in
-        let right = t.rights.(node) in
+        let left = i32_get t.lefts node in
+        let right = i32_get t.rights node in
         if Float.(dist < radius)
         then (
           search left;

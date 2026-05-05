@@ -13,7 +13,11 @@ services:
       resources:
         limits:
           cpus: "0.10"
-          memory: "32MB"
+          memory: "16MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
   api1:
     build: .
@@ -26,7 +30,11 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "159MB"
+          memory: "167MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
   api2:
     build: .
@@ -39,7 +47,11 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "159MB"
+          memory: "167MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
 volumes:
   sockets:
