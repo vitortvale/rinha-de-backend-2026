@@ -38,6 +38,22 @@ let map_file path kind len =
   Std_unix.close fd;
   BA.array1_of_genarray mapped
 
+let load_u16_anon path len =
+  let src = map_file path BA.int16_unsigned len in
+  let dst = A1.create BA.int16_unsigned BA.c_layout len in
+  for i = 0 to len - 1 do
+    A1.unsafe_set dst i (A1.unsafe_get src i)
+  done;
+  dst
+
+let load_u8_anon path len =
+  let src = map_file path BA.int8_unsigned len in
+  let dst = A1.create BA.int8_unsigned BA.c_layout len in
+  for i = 0 to len - 1 do
+    A1.unsafe_set dst i (A1.unsafe_get src i)
+  done;
+  dst
+
 let map_i32 path len = map_file path BA.int32 len
 let i32_get a i = A1.unsafe_get a i |> Stdlib.Int32.to_int
 let i64_get a i = A1.unsafe_get a i |> Int64.to_int_exn
@@ -67,8 +83,8 @@ let load data_dir =
     Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
   in
   Gc.full_major ();
-  { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
-  ; labels = map_file labels_path BA.int8_unsigned reference_rows
+  { vectors = load_u16_anon vectors_path (reference_rows * Vectorize.dim)
+  ; labels = load_u8_anon labels_path reference_rows
   ; rows = map_i32 rows_path reference_rows
   ; kinds = map_file kind_path BA.int8_unsigned node_count
   ; pivots = map_i32 pivot_path node_count
