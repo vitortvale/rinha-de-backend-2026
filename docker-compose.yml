@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:39d97d7
+    image: vitortvale/rinha-2026-ocaml:1d64a1f
     pull_policy: always
     hostname: api1
     environment:
@@ -14,7 +14,11 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "159MB"
+          memory: "167MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
   api2:
     <<: *api
@@ -28,7 +32,11 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "159MB"
+          memory: "167MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
   haproxy:
     image: haproxy:2.9-alpine
@@ -46,7 +54,11 @@ services:
       resources:
         limits:
           cpus: "0.10"
-          memory: "32MB"
+          memory: "16MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
 networks:
   rinha:
