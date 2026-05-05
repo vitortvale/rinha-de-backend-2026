@@ -11,7 +11,7 @@ type t =
   ; mcc_risk : float String.Table.t
   }
 
-let is_space = function
+let[@zero_alloc] is_space = function
   | ' ' | '\n' | '\r' | '\t' -> true
   | _ -> false
 

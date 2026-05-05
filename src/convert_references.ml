@@ -6,7 +6,7 @@ open Core
 
 let dim = 14
 let scale = 10000.
-let leaf_size = 64
+let leaf_size = 8
 
 let quantize value =
   Float.iround_nearest_exn ((value +. 1.) *. scale)

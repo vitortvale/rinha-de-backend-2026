@@ -21,6 +21,18 @@ let response_json score =
   let approved = Float.(score < 0.6) in
   sprintf {|{"approved":%s,"fraud_score":%.1f}|} (Bool.to_string approved) score
 
+let static_response status reason ?(content_type = "text/plain") body =
+  response status reason ~content_type body
+
+let ready_response = static_response 200 "OK" "OK"
+let bad_request_response = static_response 400 "Bad Request" "bad request"
+let not_found_response = static_response 404 "Not Found" "not found"
+
+let fraud_responses =
+  Array.init (Index.k + 1) ~f:(fun frauds ->
+    let score = Float.of_int frauds /. Float.of_int Index.k in
+    static_response 200 "OK" ~content_type:"application/json" (response_json score))
+
 let parse_request_line line =
   match String.split line ~on:' ' with
   | meth :: path :: _ -> meth, path
@@ -58,7 +70,7 @@ let read_body reader len =
     let bytes = Bytes.create len in
     Reader.really_read reader bytes
     >>| function
-    | `Ok -> Some (Bytes.to_string bytes)
+    | `Ok -> Some (Stdlib.Bytes.unsafe_to_string bytes)
     | `Eof _ -> None)
 
 let write_and_close writer payload =
@@ -72,20 +84,19 @@ let handle_request config index reader writer =
   | Some request ->
     read_body reader request.content_length
     >>= (function
-     | None -> write_and_close writer (response 400 "Bad Request" "bad request")
+     | None -> write_and_close writer bad_request_response
      | Some body ->
        (match request.meth, request.path with
-        | "GET", "/ready" -> write_and_close writer (response 200 "OK" "OK")
+        | "GET", "/ready" ->
+          write_and_close writer ready_response
         | "POST", "/fraud-score" ->
-          Monitor.try_with (fun () ->
+          (try
             let query = Vectorize.to_quantized config body in
-            let score = Index.score index query in
-            return (response_json score))
-          >>= (function
-           | Ok body ->
-             write_and_close writer (response 200 "OK" ~content_type:"application/json" body)
-           | Error _ -> write_and_close writer (response 400 "Bad Request" "bad request"))
-        | _ -> write_and_close writer (response 404 "Not Found" "not found")))
+            let frauds = Index.score_frauds index query in
+            write_and_close writer fraud_responses.(frauds)
+          with
+          | _ -> write_and_close writer bad_request_response)
+        | _ -> write_and_close writer not_found_response))
 
 let main () =
   let data_dir = Sys.getenv "DATA_DIR" |> Option.value ~default:"resources" in
@@ -98,6 +109,11 @@ let main () =
   let index = Index.load data_dir in
   let where = Tcp.Where_to_listen.of_file socket_path in
   Tcp.Server.create
+    ~backlog:4096
+    ~max_accepts_per_batch:256
+    ~max_connections:20_000
+    ~reader_buffer_size:4096
+    ~writer_buffer_size:512
     ~on_handler_error:`Ignore
     where
     (fun _addr reader writer -> handle_request config index reader writer)

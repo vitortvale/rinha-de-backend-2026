@@ -15,4 +15,10 @@
   (public_name convert_references)
   (name convert_references)
   (modules convert_references)
-  (libraries core unix)))
+  (libraries core unix))
+
+ (executable
+  (public_name rinha_bench)
+  (name bench)
+  (modules bench)
+  (libraries rinha_lib core unix)))

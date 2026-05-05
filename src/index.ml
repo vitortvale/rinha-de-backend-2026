@@ -7,14 +7,14 @@ open Core
 type t =
   { vectors : (int, BA.int16_unsigned_elt, BA.c_layout) A1.t
   ; labels : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; rows : (int32, BA.int32_elt, BA.c_layout) A1.t
+  ; rows : int array
   ; kinds : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; pivots : (int32, BA.int32_elt, BA.c_layout) A1.t
-  ; radii : (int64, BA.int64_elt, BA.c_layout) A1.t
-  ; lefts : (int32, BA.int32_elt, BA.c_layout) A1.t
-  ; rights : (int32, BA.int32_elt, BA.c_layout) A1.t
-  ; starts : (int32, BA.int32_elt, BA.c_layout) A1.t
-  ; counts : (int32, BA.int32_elt, BA.c_layout) A1.t
+  ; pivots : int array
+  ; radii : float array
+  ; lefts : int array
+  ; rights : int array
+  ; starts : int array
+  ; counts : int array
   ; node_count : int
   }
 
@@ -41,6 +41,9 @@ let map_file path kind len =
 let map_i32 path len = map_file path BA.int32 len
 let i32_get a i = A1.unsafe_get a i |> Int32.to_int_exn
 let i64_get a i = A1.unsafe_get a i |> Int64.to_int_exn
+let i32_array path len =
+  let mapped = map_i32 path len in
+  Array.init len ~f:(fun i -> i32_get mapped i)
 
 let load data_dir =
   let vectors_path = Filename.concat data_dir "references.u16" in
@@ -63,34 +66,92 @@ let load data_dir =
   validate_size right_path (node_count * 4);
   validate_size start_path (node_count * 4);
   validate_size count_path (node_count * 4);
+  let radii_raw = map_file radius_path BA.int64 node_count in
   { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
   ; labels = map_file labels_path BA.int8_unsigned reference_rows
-  ; rows = map_i32 rows_path reference_rows
+  ; rows = i32_array rows_path reference_rows
   ; kinds = map_file kind_path BA.int8_unsigned node_count
-  ; pivots = map_i32 pivot_path node_count
-  ; radii = map_file radius_path BA.int64 node_count
-  ; lefts = map_i32 left_path node_count
-  ; rights = map_i32 right_path node_count
-  ; starts = map_i32 start_path node_count
-  ; counts = map_i32 count_path node_count
+  ; pivots = i32_array pivot_path node_count
+  ; radii = Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
+  ; lefts = i32_array left_path node_count
+  ; rights = i32_array right_path node_count
+  ; starts = i32_array start_path node_count
+  ; counts = i32_array count_path node_count
   ; node_count
   }
 
-let distance_until vectors query base limit dim acc =
-  let rec loop dim acc =
-    if dim = Vectorize.dim || acc >= limit
+let row_distance t query row limit =
+  let vectors = t.vectors in
+  let base = row * Vectorize.dim in
+  let d0 = query.(0) - A1.unsafe_get vectors base in
+  let acc = d0 * d0 in
+  if acc >= limit
+  then acc
+  else (
+    let d1 = query.(1) - A1.unsafe_get vectors (base + 1) in
+    let acc = acc + (d1 * d1) in
+    if acc >= limit
     then acc
     else (
-      let diff = query.(dim) - A1.unsafe_get vectors (base + dim) in
-      loop (dim + 1) (acc + (diff * diff)))
-  in
-  loop dim acc
+      let d2 = query.(2) - A1.unsafe_get vectors (base + 2) in
+      let acc = acc + (d2 * d2) in
+      if acc >= limit
+      then acc
+      else (
+        let d3 = query.(3) - A1.unsafe_get vectors (base + 3) in
+        let acc = acc + (d3 * d3) in
+        if acc >= limit
+        then acc
+        else (
+          let d4 = query.(4) - A1.unsafe_get vectors (base + 4) in
+          let acc = acc + (d4 * d4) in
+          if acc >= limit
+          then acc
+          else (
+            let d5 = query.(5) - A1.unsafe_get vectors (base + 5) in
+            let acc = acc + (d5 * d5) in
+            if acc >= limit
+            then acc
+            else (
+              let d6 = query.(6) - A1.unsafe_get vectors (base + 6) in
+              let acc = acc + (d6 * d6) in
+              if acc >= limit
+              then acc
+              else (
+                let d7 = query.(7) - A1.unsafe_get vectors (base + 7) in
+                let acc = acc + (d7 * d7) in
+                if acc >= limit
+                then acc
+                else (
+                  let d8 = query.(8) - A1.unsafe_get vectors (base + 8) in
+                  let acc = acc + (d8 * d8) in
+                  if acc >= limit
+                  then acc
+                  else (
+                    let d9 = query.(9) - A1.unsafe_get vectors (base + 9) in
+                    let acc = acc + (d9 * d9) in
+                    if acc >= limit
+                    then acc
+                    else (
+                      let d10 = query.(10) - A1.unsafe_get vectors (base + 10) in
+                      let acc = acc + (d10 * d10) in
+                      if acc >= limit
+                      then acc
+                      else (
+                        let d11 = query.(11) - A1.unsafe_get vectors (base + 11) in
+                        let acc = acc + (d11 * d11) in
+                        if acc >= limit
+                        then acc
+                        else (
+                          let d12 = query.(12) - A1.unsafe_get vectors (base + 12) in
+                          let acc = acc + (d12 * d12) in
+                          if acc >= limit
+                          then acc
+                          else (
+                            let d13 = query.(13) - A1.unsafe_get vectors (base + 13) in
+                            acc + (d13 * d13))))))))))))))
 
-let row_distance t query row limit =
-  distance_until t.vectors query (row * Vectorize.dim) limit 0 0
-
-let add_candidate t query best_dist best_label row =
-  let dist = row_distance t query row best_dist.(k - 1) in
+let add_candidate_dist t best_dist best_label best_tau row dist =
   if dist < best_dist.(k - 1)
   then (
     let rec insertion_pos pos =
@@ -103,44 +164,47 @@ let add_candidate t query best_dist best_label row =
     in
     let pos = insertion_pos (k - 1) in
     best_dist.(pos) <- dist;
-    best_label.(pos) <- A1.unsafe_get t.labels row)
+    best_label.(pos) <- A1.unsafe_get t.labels row;
+    best_tau := Stdlib.sqrt (Float.of_int best_dist.(k - 1)))
 
-let tau best_dist =
-  if best_dist.(k - 1) = Int.max_value
-  then Float.infinity
-  else Float.sqrt (Float.of_int best_dist.(k - 1))
+let add_candidate t query best_dist best_label best_tau row =
+  let dist = row_distance t query row best_dist.(k - 1) in
+  add_candidate_dist t best_dist best_label best_tau row dist
 
-let score t query =
+let score_frauds t query =
   let best_dist = Array.create ~len:k Int.max_value in
   let best_label = Array.create ~len:k 0 in
+  let best_tau = ref Float.infinity in
   let rec search node =
     if node >= 0 && node < t.node_count
     then (
       match A1.unsafe_get t.kinds node with
       | 0 ->
-        let start = i32_get t.starts node in
-        let count = i32_get t.counts node in
+        let start = t.starts.(node) in
+        let count = t.counts.(node) in
         for pos = start to start + count - 1 do
-          add_candidate t query best_dist best_label (i32_get t.rows pos)
+          add_candidate t query best_dist best_label best_tau t.rows.(pos)
         done
       | _ ->
-        let pivot = i32_get t.pivots node in
+        let pivot = t.pivots.(node) in
         let dist_sq = row_distance t query pivot Int.max_value in
-        add_candidate t query best_dist best_label pivot;
+        add_candidate_dist t best_dist best_label best_tau pivot dist_sq;
         let dist = Float.sqrt (Float.of_int dist_sq) in
-        let radius = Float.sqrt (Float.of_int (i64_get t.radii node)) in
-        let left = i32_get t.lefts node in
-        let right = i32_get t.rights node in
+        let radius = t.radii.(node) in
+        let left = t.lefts.(node) in
+        let right = t.rights.(node) in
         if Float.(dist < radius)
         then (
           search left;
-          if Float.(dist + tau best_dist >= radius) then search right)
+          if Float.(dist + !best_tau >= radius) then search right)
         else (
           search right;
-          if Float.(dist - tau best_dist <= radius) then search left))
+          if Float.(dist - !best_tau <= radius) then search left))
   in
   search 0;
   let frauds =
     best_label.(0) + best_label.(1) + best_label.(2) + best_label.(3) + best_label.(4)
   in
-  Float.of_int frauds /. Float.of_int k
+  frauds
+
+let score t query = Float.of_int (score_frauds t query) /. Float.of_int k

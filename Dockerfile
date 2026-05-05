@@ -20,6 +20,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /src/_build/install/default/bin/rinha_api /app/rinha_api
+COPY --from=build /src/_build/install/default/bin/rinha_bench /app/rinha_bench
 COPY --from=build /tmp/references.u16 /app/data/references.u16
 COPY --from=build /tmp/labels.u8 /app/data/labels.u8
 COPY --from=build /tmp/vp_rows.i32 /app/data/vp_rows.i32
@@ -33,5 +34,5 @@ COPY --from=build /tmp/vp_count.i32 /app/data/vp_count.i32
 COPY resources/mcc_risk.json /app/data/mcc_risk.json
 COPY resources/normalization.json /app/data/normalization.json
 
-ENV SOCKET_PATH=/tmp/rinha-api.sock DATA_DIR=/app/data
+ENV SOCKET_PATH=/tmp/rinha-api.sock DATA_DIR=/app/data OCAMLRUNPARAM=s=2M,o=120
 CMD ["/app/rinha_api"]
