@@ -20,6 +20,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /src/_build/install/default/bin/rinha_api /app/rinha_api
+COPY --from=build /src/_build/install/default/bin/rinha_healthcheck /app/rinha_healthcheck
 COPY --from=build /src/_build/install/default/bin/rinha_bench /app/rinha_bench
 COPY --from=build /tmp/references.u16 /app/data/references.u16
 COPY --from=build /tmp/labels.u8 /app/data/labels.u8

@@ -12,6 +12,12 @@
   (libraries rinha_lib core async unix))
 
  (executable
+  (public_name rinha_healthcheck)
+  (name healthcheck)
+  (modules healthcheck)
+  (libraries unix))
+
+ (executable
   (public_name convert_references)
   (name convert_references)
   (modules convert_references)
