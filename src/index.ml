@@ -19,10 +19,12 @@ type vp =
 
 type t =
   { vp : vp option
-  ; centroid_ivf_index : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; centroid_ivf_index_i16 : (int, BA.int16_signed_elt, BA.c_layout) A1.t
+  ; centroid_ivf_labels : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
+  ; centroid_ivf_blocks_i16 : (int, BA.int16_signed_elt, BA.c_layout) A1.t
   ; centroid_ivf_centroids : float array
   ; centroid_ivf_offsets : int array
+  ; centroid_ivf_label_base : int
+  ; centroid_ivf_block_base_i16 : int
   ; centroid_ivf_k : int
   ; centroid_ivf_total_blocks : int
   ; ivf_nprobe : int
@@ -130,13 +132,23 @@ let load_vp data_dir =
 
 let load_index ?(with_vp = false) data_dir =
   let centroid_ivf_index_path = Filename.concat data_dir "centroid_ivf_index.bin" in
-  let centroid_ivf_index_len = (Std_unix.stat centroid_ivf_index_path).st_size in
-  let centroid_ivf_index =
-    map_file centroid_ivf_index_path BA.int8_unsigned centroid_ivf_index_len
+  let centroid_ivf_meta_path = Filename.concat data_dir "centroid_ivf_meta.bin" in
+  let centroid_ivf_labels_path = Filename.concat data_dir "centroid_ivf_labels.u8" in
+  let centroid_ivf_blocks_path = Filename.concat data_dir "centroid_ivf_blocks.i16" in
+  let split_index =
+    Stdlib.Sys.file_exists centroid_ivf_meta_path
+    && Stdlib.Sys.file_exists centroid_ivf_labels_path
+    && Stdlib.Sys.file_exists centroid_ivf_blocks_path
   in
-  if centroid_ivf_index_len land 1 <> 0 then failwith "bad centroid_ivf index size";
-  let centroid_ivf_index_i16 =
-    map_file centroid_ivf_index_path BA.int16_signed (centroid_ivf_index_len lsr 1)
+  let centroid_ivf_index_len =
+    (Std_unix.stat (if split_index then centroid_ivf_meta_path else centroid_ivf_index_path))
+      .st_size
+  in
+  let centroid_ivf_index =
+    map_file
+      (if split_index then centroid_ivf_meta_path else centroid_ivf_index_path)
+      BA.int8_unsigned
+      centroid_ivf_index_len
   in
   let centroid_ivf_u32 offset =
     let b0 = A1.unsafe_get centroid_ivf_index offset in
@@ -165,8 +177,38 @@ let load_index ?(with_vp = false) data_dir =
      || centroid_ivf_dim <> Vectorize.dim
   then failwith "bad centroid_ivf index metadata";
   let centroid_ivf_offsets_base = 16 + (Vectorize.dim * centroid_ivf_k * 4) in
+  let centroid_ivf_labels_base = centroid_ivf_offsets_base + ((centroid_ivf_k + 1) * 4) in
+  if split_index && centroid_ivf_index_len <> centroid_ivf_labels_base
+  then failwith "bad centroid_ivf meta size";
   let centroid_ivf_total_blocks =
     centroid_ivf_u32 (centroid_ivf_offsets_base + (centroid_ivf_k * 4))
+  in
+  let
+    ( centroid_ivf_labels
+    , centroid_ivf_blocks_i16
+    , centroid_ivf_label_base
+    , centroid_ivf_block_base_i16 )
+    =
+    if split_index
+    then (
+      validate_size centroid_ivf_labels_path (centroid_ivf_total_blocks * 8);
+      validate_size centroid_ivf_blocks_path (centroid_ivf_total_blocks * 14 * 8 * 2);
+      ( map_file
+          centroid_ivf_labels_path
+          BA.int8_unsigned
+          (centroid_ivf_total_blocks * 8)
+      , map_file
+          centroid_ivf_blocks_path
+          BA.int16_signed
+          (centroid_ivf_total_blocks * 14 * 8)
+      , 0
+      , 0 ))
+    else (
+      if centroid_ivf_index_len land 1 <> 0 then failwith "bad centroid_ivf index size";
+      ( centroid_ivf_index
+      , map_file centroid_ivf_index_path BA.int16_signed (centroid_ivf_index_len lsr 1)
+      , centroid_ivf_labels_base
+      , (centroid_ivf_labels_base + (centroid_ivf_total_blocks * 8)) lsr 1 ))
   in
   let centroid_ivf_centroids =
     Array.init (Vectorize.dim * centroid_ivf_k) ~f:(fun i ->
@@ -178,10 +220,12 @@ let load_index ?(with_vp = false) data_dir =
   in
   Gc.full_major ();
   { vp = (if with_vp then Some (load_vp data_dir) else None)
-  ; centroid_ivf_index
-  ; centroid_ivf_index_i16
+  ; centroid_ivf_labels
+  ; centroid_ivf_blocks_i16
   ; centroid_ivf_centroids
   ; centroid_ivf_offsets
+  ; centroid_ivf_label_base
+  ; centroid_ivf_block_base_i16
   ; centroid_ivf_k
   ; centroid_ivf_total_blocks
   ; ivf_nprobe = Int.clamp_exn (int_env "IVF_NPROBE" 24) ~min:1 ~max:centroid_ivf_k
@@ -297,12 +341,6 @@ let centroid_ivf_offsets_base t =
   centroid_ivf_centroids_base + (Vectorize.dim * t.centroid_ivf_k * 4)
 ;;
 
-let centroid_ivf_labels_base t = centroid_ivf_offsets_base t + ((t.centroid_ivf_k + 1) * 4)
-
-let centroid_ivf_blocks_base t =
-  centroid_ivf_labels_base t + (t.centroid_ivf_total_blocks * 8)
-;;
-
 let centroid_ivf_offset t centroid = t.centroid_ivf_offsets.(centroid)
 
 let reset_best (best_dist @ local) (best_label @ local) =
@@ -414,20 +452,53 @@ let centroid_ivf_top_centroids
   ()
 ;;
 
-let[@inline always] centroid_ivf_add_candidate_label (best_dist @ local) (best_label @ local) label dist =
+let[@inline always] centroid_ivf_add_candidate_label
+  (best_dist @ local)
+  (best_label @ local)
+  label
+  dist
+  =
   if dist < best_dist.(k - 1)
   then (
-    let rec insert pos =
-      if pos > 0 && dist < best_dist.(pos - 1)
-      then (
-        best_dist.(pos) <- best_dist.(pos - 1);
-        best_label.(pos) <- best_label.(pos - 1);
-        insert (pos - 1))
-      else pos
-    in
-    let pos = insert (k - 1) in
-    best_dist.(pos) <- dist;
-    best_label.(pos) <- label)
+    if dist < best_dist.(0)
+    then (
+      best_dist.(4) <- best_dist.(3);
+      best_label.(4) <- best_label.(3);
+      best_dist.(3) <- best_dist.(2);
+      best_label.(3) <- best_label.(2);
+      best_dist.(2) <- best_dist.(1);
+      best_label.(2) <- best_label.(1);
+      best_dist.(1) <- best_dist.(0);
+      best_label.(1) <- best_label.(0);
+      best_dist.(0) <- dist;
+      best_label.(0) <- label)
+    else if dist < best_dist.(1)
+    then (
+      best_dist.(4) <- best_dist.(3);
+      best_label.(4) <- best_label.(3);
+      best_dist.(3) <- best_dist.(2);
+      best_label.(3) <- best_label.(2);
+      best_dist.(2) <- best_dist.(1);
+      best_label.(2) <- best_label.(1);
+      best_dist.(1) <- dist;
+      best_label.(1) <- label)
+    else if dist < best_dist.(2)
+    then (
+      best_dist.(4) <- best_dist.(3);
+      best_label.(4) <- best_label.(3);
+      best_dist.(3) <- best_dist.(2);
+      best_label.(3) <- best_label.(2);
+      best_dist.(2) <- dist;
+      best_label.(2) <- label)
+    else if dist < best_dist.(3)
+    then (
+      best_dist.(4) <- best_dist.(3);
+      best_label.(4) <- best_label.(3);
+      best_dist.(3) <- dist;
+      best_label.(3) <- label)
+    else (
+      best_dist.(4) <- dist;
+      best_label.(4) <- label))
 ;;
 
 let[@inline always] sq_diff value query =
@@ -438,10 +509,8 @@ let[@inline always] sq_diff value query =
 let centroid_ivf_scan_probe t query (best_dist @ local) (best_label @ local) centroid =
   let start_block = centroid_ivf_offset t centroid in
   let stop_block = centroid_ivf_offset t (centroid + 1) in
-  let blocks_base = centroid_ivf_blocks_base t in
-  let labels_base = centroid_ivf_labels_base t in
-  let blocks_i16 = t.centroid_ivf_index_i16 in
-  let labels = t.centroid_ivf_index in
+  let blocks_i16 = t.centroid_ivf_blocks_i16 in
+  let labels = t.centroid_ivf_labels in
   let q0 = query.(0) - 10_000 in
   let q1 = query.(1) - 10_000 in
   let q2 = query.(2) - 10_000 in
@@ -457,8 +526,8 @@ let centroid_ivf_scan_probe t query (best_dist @ local) (best_label @ local) cen
   let q12 = query.(12) - 10_000 in
   let q13 = query.(13) - 10_000 in
   for block = start_block to stop_block - 1 do
-    let block_base = (blocks_base lsr 1) + (block * 112) in
-    let label_base = labels_base + (block * 8) in
+    let block_base = t.centroid_ivf_block_base_i16 + (block * 112) in
+    let label_base = t.centroid_ivf_label_base + (block * 8) in
     let base1 = block_base + 8 in
     let base2 = base1 + 8 in
     let base3 = base2 + 8 in
@@ -829,15 +898,15 @@ let prewarm t =
           + Int.of_float vp.radii.(node)
      done);
   let rec touch_index offset =
-    if offset < A1.dim t.centroid_ivf_index
+    if offset < A1.dim t.centroid_ivf_labels
     then (
-      checksum := !checksum + A1.unsafe_get t.centroid_ivf_index offset;
+      checksum := !checksum + A1.unsafe_get t.centroid_ivf_labels offset;
       touch_index (offset + 4096))
   in
   let rec touch_index_i16 offset =
-    if offset < A1.dim t.centroid_ivf_index_i16
+    if offset < A1.dim t.centroid_ivf_blocks_i16
     then (
-      checksum := !checksum + A1.unsafe_get t.centroid_ivf_index_i16 offset;
+      checksum := !checksum + A1.unsafe_get t.centroid_ivf_blocks_i16 offset;
       touch_index_i16 (offset + 2048))
   in
   touch_index 0;
@@ -891,8 +960,7 @@ let score_frauds_vp t query =
   frauds_of_labels best_label
 ;;
 
-let score_frauds_with_scorer t scorer query =
-  score_frauds_centroid_ivf_with_scorer t scorer query
+let score_frauds_with_scorer t _scorer query = score_frauds_centroid_ivf t query
 ;;
 
 let score_frauds t query = score_frauds_centroid_ivf t query

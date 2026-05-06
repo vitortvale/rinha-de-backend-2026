@@ -11,6 +11,7 @@ RUN eval $(opam env --switch=5.2.0+ox) \
  && gzip -cd resources/references.json.gz > /tmp/references.json \
  && _build/install/default/bin/convert_references /tmp/references.json /tmp/references.u16 /tmp/labels.u8 /tmp \
  && gzip -cd resources/centroid_ivf_index.bin.gz > /tmp/centroid_ivf_index.bin \
+ && _build/install/default/bin/convert_references split-ivf /tmp/centroid_ivf_index.bin /tmp/centroid_ivf_meta.bin /tmp/centroid_ivf_labels.u8 /tmp/centroid_ivf_blocks.i16 \
  && rm /tmp/references.json
 
 FROM debian:12-slim AS runtime
@@ -33,7 +34,9 @@ COPY --from=build /tmp/vp_left.i32 /app/data/vp_left.i32
 COPY --from=build /tmp/vp_right.i32 /app/data/vp_right.i32
 COPY --from=build /tmp/vp_start.i32 /app/data/vp_start.i32
 COPY --from=build /tmp/vp_count.i32 /app/data/vp_count.i32
-COPY --from=build /tmp/centroid_ivf_index.bin /app/data/centroid_ivf_index.bin
+COPY --from=build /tmp/centroid_ivf_meta.bin /app/data/centroid_ivf_meta.bin
+COPY --from=build /tmp/centroid_ivf_labels.u8 /app/data/centroid_ivf_labels.u8
+COPY --from=build /tmp/centroid_ivf_blocks.i16 /app/data/centroid_ivf_blocks.i16
 COPY resources/mcc_risk.json /app/data/mcc_risk.json
 COPY resources/normalization.json /app/data/normalization.json
 
