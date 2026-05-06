@@ -7,6 +7,7 @@ This repository has a hard submission rule:
 - `api1` and `api2` must both run the same immutable API image tag.
 - `api1` and `api2` must communicate through Unix sockets using `SOCKET_PATH=/sockets/api1.sock` and `SOCKET_PATH=/sockets/api2.sock`.
 - Only `haproxy` may publish host port `9999`.
+- The CPU distribution is fixed: `api1` gets `0.40`, `api2` gets `0.40`, and `haproxy` gets `0.20`. Do not change this distribution again.
 - Do not replace HAProxy with a direct `api1` port binding.
 - Do not turn `api2` into a sleeping sidecar.
 - There is intentionally no topology workflow or assertion script on this branch; this `AGENTS.md` file is the source of truth for agents.
