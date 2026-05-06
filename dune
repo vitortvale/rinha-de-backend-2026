@@ -1,3 +1,16 @@
+(env
+ (release
+  (ocamlopt_flags
+   (:standard
+    -O3
+    -rounds
+    2
+    -unbox-closures
+    -flambda2-result-types-all-functions
+    -flambda2-join-points
+    -zero-alloc-check
+    default))))
+
 (subdir
  src
  (library
