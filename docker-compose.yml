@@ -1,6 +1,6 @@
 services:
   api1:
-    image: vitortvale/rinha-2026-ocaml:c9a0407
+    image: vitortvale/rinha-2026-ocaml:76e4400
     pull_policy: always
     ports:
       - "9999:9999"
@@ -20,7 +20,7 @@ services:
         hard: 65535
 
   api2:
-    image: vitortvale/rinha-2026-ocaml:c9a0407
+    image: vitortvale/rinha-2026-ocaml:76e4400
     pull_policy: always
     command: [ "sleep", "infinity" ]
     environment:
