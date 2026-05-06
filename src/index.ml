@@ -6,14 +6,14 @@ open Core
 type t =
   { vectors : (int, BA.int16_unsigned_elt, BA.c_layout) A1.t
   ; labels : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; rows : int array
+  ; rows : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; kinds : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
-  ; pivots : int array
+  ; pivots : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; radii : float array
-  ; lefts : int array
-  ; rights : int array
-  ; starts : int array
-  ; counts : int array
+  ; lefts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
+  ; rights : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
+  ; starts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
+  ; counts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; node_count : int
   }
 
@@ -39,31 +39,20 @@ let map_file path kind len =
   BA.array1_of_genarray mapped
 ;;
 
-let load_u16_anon path len =
-  let src = map_file path BA.int16_unsigned len in
-  let dst = A1.create BA.int16_unsigned BA.c_layout len in
-  for i = 0 to len - 1 do
-    A1.unsafe_set dst i (A1.unsafe_get src i)
-  done;
-  dst
-;;
-
-let load_u8_anon path len =
-  let src = map_file path BA.int8_unsigned len in
-  let dst = A1.create BA.int8_unsigned BA.c_layout len in
-  for i = 0 to len - 1 do
-    A1.unsafe_set dst i (A1.unsafe_get src i)
-  done;
-  dst
-;;
-
 let map_i32 path len = map_file path BA.int32 len
 let i32_get a i = A1.unsafe_get a i |> Stdlib.Int32.to_int
 let i64_get a i = A1.unsafe_get a i |> Int64.to_int_exn
 
-let load_i32_int_array path len =
-  let src = map_i32 path len in
-  Array.init len ~f:(fun i -> i32_get src i)
+let map_i32_bytes path len = map_file path BA.int8_unsigned (len * 4)
+
+let i32_bytes_get a i =
+  let base = i lsl 2 in
+  let b0 = A1.unsafe_get a base in
+  let b1 = A1.unsafe_get a (base + 1) in
+  let b2 = A1.unsafe_get a (base + 2) in
+  let b3 = A1.unsafe_get a (base + 3) in
+  let unsigned = b0 lor (b1 lsl 8) lor (b2 lsl 16) lor (b3 lsl 24) in
+  if b3 land 0x80 = 0 then unsigned else unsigned - 0x1_0000_0000
 ;;
 
 let load data_dir =
@@ -92,16 +81,16 @@ let load data_dir =
     Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
   in
   Gc.full_major ();
-  { vectors = load_u16_anon vectors_path (reference_rows * Vectorize.dim)
-  ; labels = load_u8_anon labels_path reference_rows
-  ; rows = load_i32_int_array rows_path reference_rows
+  { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
+  ; labels = map_file labels_path BA.int8_unsigned reference_rows
+  ; rows = map_i32_bytes rows_path reference_rows
   ; kinds = map_file kind_path BA.int8_unsigned node_count
-  ; pivots = load_i32_int_array pivot_path node_count
+  ; pivots = map_i32_bytes pivot_path node_count
   ; radii
-  ; lefts = load_i32_int_array left_path node_count
-  ; rights = load_i32_int_array right_path node_count
-  ; starts = load_i32_int_array start_path node_count
-  ; counts = load_i32_int_array count_path node_count
+  ; lefts = map_i32_bytes left_path node_count
+  ; rights = map_i32_bytes right_path node_count
+  ; starts = map_i32_bytes start_path node_count
+  ; counts = map_i32_bytes count_path node_count
   ; node_count
   }
 ;;
@@ -206,17 +195,17 @@ let prewarm t =
     checksum := !checksum + A1.unsafe_get t.vectors base
   done;
   for row = 0 to reference_rows - 1 do
-    checksum := !checksum + A1.unsafe_get t.labels row + t.rows.(row)
+    checksum := !checksum + A1.unsafe_get t.labels row + i32_bytes_get t.rows row
   done;
   for node = 0 to t.node_count - 1 do
     checksum
     := !checksum
        + A1.unsafe_get t.kinds node
-       + t.pivots.(node)
-       + t.lefts.(node)
-       + t.rights.(node)
-       + t.starts.(node)
-       + t.counts.(node)
+       + i32_bytes_get t.pivots node
+       + i32_bytes_get t.lefts node
+       + i32_bytes_get t.rights node
+       + i32_bytes_get t.starts node
+       + i32_bytes_get t.counts node
        + Int.of_float t.radii.(node)
   done;
   Sys.opaque_identity !checksum |> ignore;
@@ -232,19 +221,19 @@ let score_frauds t query =
     then (
       match A1.unsafe_get t.kinds node with
       | 0 ->
-        let start = t.starts.(node) in
-        let count = t.counts.(node) in
+        let start = i32_bytes_get t.starts node in
+        let count = i32_bytes_get t.counts node in
         for pos = start to start + count - 1 do
-          add_candidate t query best_dist best_label best_tau t.rows.(pos)
+          add_candidate t query best_dist best_label best_tau (i32_bytes_get t.rows pos)
         done
       | _ ->
-        let pivot = t.pivots.(node) in
+        let pivot = i32_bytes_get t.pivots node in
         let dist_sq = row_distance t query pivot Int.max_value in
         add_candidate_dist t best_dist best_label best_tau pivot dist_sq;
         let dist = Float.sqrt (Float.of_int dist_sq) in
         let radius = t.radii.(node) in
-        let left = t.lefts.(node) in
-        let right = t.rights.(node) in
+        let left = i32_bytes_get t.lefts node in
+        let right = i32_bytes_get t.rights node in
         if Float.(dist < radius)
         then (
           search left;
