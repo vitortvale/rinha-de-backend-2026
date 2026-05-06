@@ -287,7 +287,7 @@ let add_candidate vp query best_dist best_label best_tau row =
   add_candidate_dist vp best_dist best_label best_tau row dist
 ;;
 
-let frauds_of_labels best_label =
+let[@inline always] frauds_of_labels best_label =
   best_label.(0) + best_label.(1) + best_label.(2) + best_label.(3) + best_label.(4)
 ;;
 
@@ -414,7 +414,7 @@ let centroid_ivf_top_centroids
   ()
 ;;
 
-let centroid_ivf_add_candidate_label (best_dist @ local) (best_label @ local) label dist =
+let[@inline always] centroid_ivf_add_candidate_label (best_dist @ local) (best_label @ local) label dist =
   if dist < best_dist.(k - 1)
   then (
     let rec insert pos =
@@ -430,7 +430,7 @@ let centroid_ivf_add_candidate_label (best_dist @ local) (best_label @ local) la
     best_label.(pos) <- label)
 ;;
 
-let sq_diff value query =
+let[@inline always] sq_diff value query =
   let diff = value - query in
   diff * diff
 ;;
