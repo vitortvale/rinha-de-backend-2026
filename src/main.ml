@@ -13,6 +13,12 @@ and route =
   | Fraud_score
   | Other
 
+type connection_state =
+  { query : int array
+  ; mutable body_bytes : Bytes.t
+  ; mutable body_string : string
+  }
+
 let response status reason ?(content_type = "text/plain") ?(connection = "keep-alive") body =
   sprintf
     "HTTP/1.1 %d %s\r\nContent-Length: %d\r\nContent-Type: %s\r\nConnection: \
@@ -55,6 +61,19 @@ let fraud_responses_close =
       ~connection:"close"
       ~content_type:"application/json"
       (response_json score))
+
+let create_connection_state () =
+  { query = Array.create ~len:Vectorize.dim 0
+  ; body_bytes = Bytes.create 0
+  ; body_string = ""
+  }
+
+let ensure_body_buffer state len =
+  if Bytes.length state.body_bytes <> len
+  then (
+    let body_bytes = Bytes.create len in
+    state.body_bytes <- body_bytes;
+    state.body_string <- Stdlib.Bytes.unsafe_to_string body_bytes)
 
 let ensure_warmed =
   let warmed = ref false in
@@ -150,14 +169,14 @@ let read_headers reader =
     in
     loop 0 false
 
-let read_body reader len =
+let read_body state reader len =
   if len = 0
   then return (Some "")
   else (
-    let bytes = Bytes.create len in
-    Reader.really_read reader bytes
+    ensure_body_buffer state len;
+    Reader.really_read reader state.body_bytes
     >>| function
-    | `Ok -> Some (Stdlib.Bytes.unsafe_to_string bytes)
+    | `Ok -> Some state.body_string
     | `Eof _ -> None)
 
 let write_and_flush writer payload =
@@ -168,12 +187,22 @@ let write_and_close writer payload =
   write_and_flush writer payload
   >>= fun () -> Writer.close writer
 
-let rec handle_connection config index query reader writer =
+let set_socket_options socket =
+  match Linux_ext.settcpopt_bool with
+  | Error _ -> ()
+  | Ok set_tcpopt_bool ->
+    (try
+       let fd = Socket.fd socket |> Fd.file_descr_exn in
+       set_tcpopt_bool fd Linux_ext.TCP_QUICKACK true
+     with
+     | _ -> ())
+
+let rec handle_connection config index state reader writer =
   read_headers reader
   >>= function
   | None -> Writer.close writer
   | Some request ->
-    read_body reader request.content_length
+    read_body state reader request.content_length
     >>= (function
      | None -> write_and_close writer bad_request_response
      | Some body ->
@@ -181,30 +210,30 @@ let rec handle_connection config index query reader writer =
         | Ready ->
           ensure_warmed index;
           let response = if request.close then ready_response_close else ready_response in
-          write_response_or_continue config index query reader writer request response
+          write_response_or_continue config index state reader writer request response
         | Fraud_score ->
           (try
             ensure_warmed index;
-            Vectorize.to_quantized_into config body query;
-            let frauds = Index.score_frauds index query in
+            Vectorize.to_quantized_into config body state.query;
+            let frauds = Index.score_frauds index state.query in
             let response =
               if request.close
               then fraud_responses_close.(frauds)
               else fraud_responses.(frauds)
             in
-            write_response_or_continue config index query reader writer request response
+            write_response_or_continue config index state reader writer request response
           with
           | _ -> write_and_close writer bad_request_response)
         | Other ->
           let response =
             if request.close then not_found_response_close else not_found_response
           in
-          write_response_or_continue config index query reader writer request response))
+          write_response_or_continue config index state reader writer request response))
 
-and write_response_or_continue config index query reader writer request payload =
+and write_response_or_continue config index state reader writer request payload =
   write_and_flush writer payload
   >>= fun () ->
-  if request.close then Writer.close writer else handle_connection config index query reader writer
+  if request.close then Writer.close writer else handle_connection config index state reader writer
 
 let main () =
   let data_dir = Sys.getenv "DATA_DIR" |> Option.value ~default:"resources" in
@@ -213,19 +242,21 @@ let main () =
   in
   let config = Config.load data_dir in
   let index = Index.load data_dir in
+  ensure_warmed index;
   let tcp_port = Sys.getenv "TCP_PORT" |> Option.map ~f:Int.of_string in
   let start_server where =
     Tcp.Server.create
+      ~buffer_age_limit:`Unlimited
       ~backlog:4096
       ~max_accepts_per_batch:256
       ~max_connections:20_000
       ~reader_buffer_size:4096
       ~writer_buffer_size:512
+      ~on_socket_accepted:set_socket_options
       ~on_handler_error:`Ignore
       where
       (fun _addr reader writer ->
-        let query = Array.create ~len:Vectorize.dim 0 in
-        handle_connection config index query reader writer)
+        handle_connection config index (create_connection_state ()) reader writer)
   in
   match tcp_port with
   | Some port ->
