@@ -16,4 +16,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Assert required Docker Compose topology
-        run: scripts/assert-compose-topology.sh
+        run: bash scripts/assert-compose-topology.sh
