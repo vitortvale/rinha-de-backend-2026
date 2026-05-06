@@ -10,6 +10,7 @@ RUN eval $(opam env --switch=5.2.0+ox) \
  && dune build --profile release @install \
  && gzip -cd resources/references.json.gz > /tmp/references.json \
  && _build/install/default/bin/convert_references /tmp/references.json /tmp/references.u16 /tmp/labels.u8 /tmp \
+ && gzip -cd resources/centroid_ivf_index.bin.gz > /tmp/centroid_ivf_index.bin \
  && rm /tmp/references.json
 
 FROM debian:12-slim AS runtime
@@ -32,6 +33,7 @@ COPY --from=build /tmp/vp_left.i32 /app/data/vp_left.i32
 COPY --from=build /tmp/vp_right.i32 /app/data/vp_right.i32
 COPY --from=build /tmp/vp_start.i32 /app/data/vp_start.i32
 COPY --from=build /tmp/vp_count.i32 /app/data/vp_count.i32
+COPY --from=build /tmp/centroid_ivf_index.bin /app/data/centroid_ivf_index.bin
 COPY resources/mcc_risk.json /app/data/mcc_risk.json
 COPY resources/normalization.json /app/data/normalization.json
 
