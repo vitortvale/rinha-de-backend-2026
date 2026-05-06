@@ -3,7 +3,7 @@ module A1 = Bigarray.Array1
 module Std_unix = Unix
 open Core
 
-type t =
+type vp =
   { vectors : (int, BA.int16_unsigned_elt, BA.c_layout) A1.t
   ; labels : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; rows : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
@@ -15,6 +15,10 @@ type t =
   ; starts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; counts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; node_count : int
+  }
+
+type t =
+  { vp : vp option
   ; centroid_ivf_index : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; centroid_ivf_index_i16 : (int, BA.int16_signed_elt, BA.c_layout) A1.t
   ; centroid_ivf_centroids : float array
@@ -69,7 +73,7 @@ let i32_bytes_get a i =
   if b3 land 0x80 = 0 then unsigned else unsigned - 0x1_0000_0000
 ;;
 
-let load data_dir =
+let load_vp data_dir =
   let vectors_path = Filename.concat data_dir "references.u16" in
   let labels_path = Filename.concat data_dir "labels.u8" in
   let rows_path = Filename.concat data_dir "vp_rows.i32" in
@@ -80,7 +84,6 @@ let load data_dir =
   let right_path = Filename.concat data_dir "vp_right.i32" in
   let start_path = Filename.concat data_dir "vp_start.i32" in
   let count_path = Filename.concat data_dir "vp_count.i32" in
-  let centroid_ivf_index_path = Filename.concat data_dir "centroid_ivf_index.bin" in
   validate_size vectors_path (reference_rows * Vectorize.dim * 2);
   validate_size labels_path reference_rows;
   validate_size rows_path (reference_rows * 4);
@@ -95,6 +98,22 @@ let load data_dir =
     let radii_raw = map_file radius_path BA.int64 node_count in
     Array.init node_count ~f:(fun i -> Stdlib.sqrt (Float.of_int (i64_get radii_raw i)))
   in
+  { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
+  ; labels = map_file labels_path BA.int8_unsigned reference_rows
+  ; rows = map_i32_bytes rows_path reference_rows
+  ; kinds = map_file kind_path BA.int8_unsigned node_count
+  ; pivots = map_i32_bytes pivot_path node_count
+  ; radii
+  ; lefts = map_i32_bytes left_path node_count
+  ; rights = map_i32_bytes right_path node_count
+  ; starts = map_i32_bytes start_path node_count
+  ; counts = map_i32_bytes count_path node_count
+  ; node_count
+  }
+;;
+
+let load_index ?(with_vp = false) data_dir =
+  let centroid_ivf_index_path = Filename.concat data_dir "centroid_ivf_index.bin" in
   let centroid_ivf_index_len = (Std_unix.stat centroid_ivf_index_path).st_size in
   let centroid_ivf_index =
     map_file centroid_ivf_index_path BA.int8_unsigned centroid_ivf_index_len
@@ -142,17 +161,7 @@ let load data_dir =
       centroid_ivf_u32 (centroid_ivf_offsets_base + (centroid * 4)))
   in
   Gc.full_major ();
-  { vectors = map_file vectors_path BA.int16_unsigned (reference_rows * Vectorize.dim)
-  ; labels = map_file labels_path BA.int8_unsigned reference_rows
-  ; rows = map_i32_bytes rows_path reference_rows
-  ; kinds = map_file kind_path BA.int8_unsigned node_count
-  ; pivots = map_i32_bytes pivot_path node_count
-  ; radii
-  ; lefts = map_i32_bytes left_path node_count
-  ; rights = map_i32_bytes right_path node_count
-  ; starts = map_i32_bytes start_path node_count
-  ; counts = map_i32_bytes count_path node_count
-  ; node_count
+  { vp = (if with_vp then Some (load_vp data_dir) else None)
   ; centroid_ivf_index
   ; centroid_ivf_index_i16
   ; centroid_ivf_centroids
@@ -161,12 +170,15 @@ let load data_dir =
   ; centroid_ivf_total_blocks
   ; ivf_nprobe = Int.clamp_exn (int_env "IVF_NPROBE" 24) ~min:1 ~max:centroid_ivf_k
   ; ivf_fast_nprobe =
-      Int.clamp_exn (int_env "IVF_FAST_NPROBE" 8) ~min:1 ~max:centroid_ivf_k
+      Int.clamp_exn (int_env "IVF_FAST_NPROBE" 4) ~min:1 ~max:centroid_ivf_k
   }
 ;;
 
-let row_distance t query row limit =
-  let vectors = t.vectors in
+let load data_dir = load_index data_dir
+let load_for_bench data_dir = load_index ~with_vp:true data_dir
+
+let row_distance vp query row limit =
+  let vectors = vp.vectors in
   let base = row * Vectorize.dim in
   let d0 = query.(0) - A1.unsafe_get vectors base in
   let acc = d0 * d0 in
@@ -237,7 +249,7 @@ let row_distance t query row limit =
                             acc + (d13 * d13))))))))))))))
 ;;
 
-let add_candidate_dist t best_dist best_label best_tau row dist =
+let add_candidate_dist vp best_dist best_label best_tau row dist =
   if dist < best_dist.(k - 1)
   then (
     let rec insertion_pos pos =
@@ -250,13 +262,13 @@ let add_candidate_dist t best_dist best_label best_tau row dist =
     in
     let pos = insertion_pos (k - 1) in
     best_dist.(pos) <- dist;
-    best_label.(pos) <- A1.unsafe_get t.labels row;
+    best_label.(pos) <- A1.unsafe_get vp.labels row;
     best_tau := Stdlib.sqrt (Float.of_int best_dist.(k - 1)))
 ;;
 
-let add_candidate t query best_dist best_label best_tau row =
-  let dist = row_distance t query row best_dist.(k - 1) in
-  add_candidate_dist t best_dist best_label best_tau row dist
+let add_candidate vp query best_dist best_label best_tau row =
+  let dist = row_distance vp query row best_dist.(k - 1) in
+  add_candidate_dist vp best_dist best_label best_tau row dist
 ;;
 
 let frauds_of_labels best_label =
@@ -616,30 +628,33 @@ let score_frauds_centroid_ivf_nprobe t query nprobe =
 
 let score_frauds_centroid_ivf t query =
   let fast = score_frauds_centroid_ivf_nprobe t query t.ivf_fast_nprobe in
-  if fast <> 2 && fast <> 3
+  if fast = 0 || fast = k
   then fast
   else score_frauds_centroid_ivf_nprobe t query t.ivf_nprobe
 ;;
 
 let prewarm t =
   let checksum = ref 0 in
-  for base = 0 to (reference_rows - 1) * Vectorize.dim do
-    checksum := !checksum + A1.unsafe_get t.vectors base
-  done;
-  for row = 0 to reference_rows - 1 do
-    checksum := !checksum + A1.unsafe_get t.labels row + i32_bytes_get t.rows row
-  done;
-  for node = 0 to t.node_count - 1 do
-    checksum
-    := !checksum
-       + A1.unsafe_get t.kinds node
-       + i32_bytes_get t.pivots node
-       + i32_bytes_get t.lefts node
-       + i32_bytes_get t.rights node
-       + i32_bytes_get t.starts node
-       + i32_bytes_get t.counts node
-       + Int.of_float t.radii.(node)
-  done;
+  (match t.vp with
+   | None -> ()
+   | Some vp ->
+     for base = 0 to (reference_rows - 1) * Vectorize.dim do
+       checksum := !checksum + A1.unsafe_get vp.vectors base
+     done;
+     for row = 0 to reference_rows - 1 do
+       checksum := !checksum + A1.unsafe_get vp.labels row + i32_bytes_get vp.rows row
+     done;
+     for node = 0 to vp.node_count - 1 do
+       checksum
+       := !checksum
+          + A1.unsafe_get vp.kinds node
+          + i32_bytes_get vp.pivots node
+          + i32_bytes_get vp.lefts node
+          + i32_bytes_get vp.rights node
+          + i32_bytes_get vp.starts node
+          + i32_bytes_get vp.counts node
+          + Int.of_float vp.radii.(node)
+     done);
   let rec touch_index offset =
     if offset < A1.dim t.centroid_ivf_index
     then (
@@ -652,27 +667,32 @@ let prewarm t =
 ;;
 
 let score_frauds_vp t query =
+  let vp =
+    match t.vp with
+    | Some vp -> vp
+    | None -> failwith "vp index not loaded"
+  in
   let best_dist = Array.create ~len:k Int.max_value in
   let best_label = Array.create ~len:k 0 in
   let best_tau = ref Float.infinity in
   let rec search node =
-    if node >= 0 && node < t.node_count
+    if node >= 0 && node < vp.node_count
     then (
-      match A1.unsafe_get t.kinds node with
+      match A1.unsafe_get vp.kinds node with
       | 0 ->
-        let start = i32_bytes_get t.starts node in
-        let count = i32_bytes_get t.counts node in
+        let start = i32_bytes_get vp.starts node in
+        let count = i32_bytes_get vp.counts node in
         for pos = start to start + count - 1 do
-          add_candidate t query best_dist best_label best_tau (i32_bytes_get t.rows pos)
+          add_candidate vp query best_dist best_label best_tau (i32_bytes_get vp.rows pos)
         done
       | _ ->
-        let pivot = i32_bytes_get t.pivots node in
-        let dist_sq = row_distance t query pivot Int.max_value in
-        add_candidate_dist t best_dist best_label best_tau pivot dist_sq;
+        let pivot = i32_bytes_get vp.pivots node in
+        let dist_sq = row_distance vp query pivot Int.max_value in
+        add_candidate_dist vp best_dist best_label best_tau pivot dist_sq;
         let dist = Float.sqrt (Float.of_int dist_sq) in
-        let radius = t.radii.(node) in
-        let left = i32_bytes_get t.lefts node in
-        let right = i32_bytes_get t.rights node in
+        let radius = vp.radii.(node) in
+        let left = i32_bytes_get vp.lefts node in
+        let right = i32_bytes_get vp.rights node in
         if Float.(dist < radius)
         then (
           search left;

@@ -14,7 +14,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.10"
+          cpus: "0.14"
           memory: "32MB"
     ulimits:
       nofile:
@@ -26,14 +26,14 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "5"
-      IVF_NPROBE: "21"
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.45"
+          cpus: "0.43"
           memory: "159MB"
     ulimits:
       nofile:
@@ -41,9 +41,9 @@ services:
         hard: 65535
     healthcheck:
       test: [ "CMD", "/app/rinha_healthcheck" ]
-      interval: 1s
-      timeout: 5s
-      retries: 30
+      interval: 5s
+      timeout: 2s
+      retries: 12
       start_period: 1s
 
   api2:
@@ -51,14 +51,14 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "5"
-      IVF_NPROBE: "21"
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.45"
+          cpus: "0.43"
           memory: "159MB"
     ulimits:
       nofile:
@@ -66,9 +66,9 @@ services:
         hard: 65535
     healthcheck:
       test: [ "CMD", "/app/rinha_healthcheck" ]
-      interval: 1s
-      timeout: 5s
-      retries: 30
+      interval: 5s
+      timeout: 2s
+      retries: 12
       start_period: 1s
 
 volumes:

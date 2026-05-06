@@ -135,7 +135,7 @@ let main { data_dir; test_data; limit; repeats } =
   let requests = load_requests test_data limit in
   printf "requests=%d\n%!" (Array.length requests);
   let config = Config.load data_dir in
-  let index = Index.load data_dir in
+  let index = Index.load_for_bench data_dir in
   let queries = Array.map requests ~f:(Vectorize.to_quantized config) in
   check_ivf_matches_vp index queries;
   run_case "parse" ~repeats requests (fun request ->
