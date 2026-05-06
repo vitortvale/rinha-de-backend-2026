@@ -1,5 +1,5 @@
 services:
-  api:
+  api1:
     image: vitortvale/rinha-2026-ocaml:e89e522
     pull_policy: always
     ports:
@@ -12,8 +12,26 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: "350MB"
+          cpus: "0.99"
+          memory: "318MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  api2:
+    image: vitortvale/rinha-2026-ocaml:e89e522
+    pull_policy: always
+    environment:
+      TCP_PORT: "9998"
+      DATA_DIR: /app/data
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.01"
+          memory: "32MB"
     ulimits:
       nofile:
         soft: 65535
