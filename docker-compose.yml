@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:9805939
+    image: vitortvale/rinha-2026-ocaml:7a4ffbb
     pull_policy: always
     hostname: api1
     environment:
