@@ -1,80 +1,39 @@
 services:
-  api1: &api
-    image: vitortvale/rinha-2026-ocaml:39301ba
+  api1:
+    image: vitortvale/rinha-2026-ocaml:c9a0407
     pull_policy: always
-    hostname: api1
-    environment:
-      SOCKET_PATH: /sockets/api1.sock
-      DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "24"
-    volumes:
-      - api-sockets:/sockets
-    networks:
-      - rinha
-    deploy:
-      resources:
-        limits:
-          cpus: "0.39"
-          memory: "159MB"
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-    healthcheck:
-      test: [ "CMD", "/app/rinha_healthcheck" ]
-      interval: 5s
-      timeout: 2s
-      retries: 12
-      start_period: 1s
-
-  api2:
-    <<: *api
-    hostname: api2
-    environment:
-      SOCKET_PATH: /sockets/api2.sock
-      DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "24"
-    networks:
-      - rinha
-    deploy:
-      resources:
-        limits:
-          cpus: "0.39"
-          memory: "159MB"
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-
-  haproxy:
-    image: haproxy:2.9-alpine
     ports:
       - "9999:9999"
-    volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
-      - api-sockets:/sockets
-    depends_on:
-      api1:
-        condition: service_healthy
-      api2:
-        condition: service_healthy
-    networks:
-      - rinha
+    environment:
+      TCP_PORT: "9999"
+      DATA_DIR: /app/data
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
     deploy:
       resources:
         limits:
-          cpus: "0.22"
-          memory: "32MB"
+          cpus: "0.999"
+          memory: "344MB"
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
 
-networks:
-  rinha:
-    driver: bridge
-
-volumes:
-  api-sockets:
+  api2:
+    image: vitortvale/rinha-2026-ocaml:c9a0407
+    pull_policy: always
+    command: [ "sleep", "infinity" ]
+    environment:
+      TCP_PORT: "9998"
+      DATA_DIR: /app/data
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.001"
+          memory: "6MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
