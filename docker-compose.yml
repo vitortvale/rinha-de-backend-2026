@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:e2ac5e3
+    image: vitortvale/rinha-2026-ocaml:ba89123
     pull_policy: always
     hostname: api1
     environment:
@@ -15,7 +15,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.41"
+          cpus: "0.40"
           memory: "159MB"
     ulimits:
       nofile:
@@ -41,7 +41,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.41"
+          cpus: "0.40"
           memory: "159MB"
     ulimits:
       nofile:
@@ -65,7 +65,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.18"
+          cpus: "0.20"
           memory: "32MB"
     ulimits:
       nofile:
