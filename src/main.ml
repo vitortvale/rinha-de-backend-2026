@@ -202,9 +202,11 @@ let rec handle_connection config index reader writer =
           write_response_or_continue config index reader writer request response))
 
 and write_response_or_continue config index reader writer request payload =
-  write_and_flush writer payload
-  >>= fun () ->
-  if request.close then Writer.close writer else handle_connection config index reader writer
+  if request.close
+  then write_and_close writer payload
+  else (
+    Writer.write writer payload;
+    handle_connection config index reader writer)
 
 let main () =
   let data_dir = Sys.getenv "DATA_DIR" |> Option.value ~default:"resources" in
