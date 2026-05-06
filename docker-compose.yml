@@ -1,6 +1,6 @@
 services:
   api1:
-    image: vitortvale/rinha-2026-ocaml:27da2c7
+    image: vitortvale/rinha-2026-ocaml:83d58b4
     pull_policy: always
     ports:
       - "9999:9999"
@@ -9,7 +9,6 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "4"
       IVF_NPROBE: "24"
-      OCAMLRUNPARAM: "s=512k,o=120"
     deploy:
       resources:
         limits:
@@ -21,7 +20,7 @@ services:
         hard: 65535
 
   api2:
-    image: vitortvale/rinha-2026-ocaml:27da2c7
+    image: vitortvale/rinha-2026-ocaml:83d58b4
     pull_policy: always
     command: [ "sleep", "infinity" ]
     environment:
@@ -29,7 +28,6 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "4"
       IVF_NPROBE: "24"
-      OCAMLRUNPARAM: "s=512k,o=120"
     deploy:
       resources:
         limits:
