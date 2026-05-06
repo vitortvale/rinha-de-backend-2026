@@ -3,11 +3,15 @@ open Async
 open Rinha_lib
 
 type request =
-  { meth : string
-  ; path : string
+  { route : route
   ; content_length : int
   ; close : bool
   }
+
+and route =
+  | Ready
+  | Fraud_score
+  | Other
 
 let response status reason ?(content_type = "text/plain") ?(connection = "keep-alive") body =
   sprintf
@@ -60,30 +64,84 @@ let ensure_warmed =
       Index.prewarm index;
       warmed := true)
 
+let starts_with line prefix =
+  let line_len = String.length line in
+  let prefix_len = String.length prefix in
+  line_len >= prefix_len
+  &&
+  let rec loop i =
+    i = prefix_len || (Char.equal line.[i] prefix.[i] && loop (i + 1))
+  in
+  loop 0
+
 let parse_request_line line =
-  match String.split line ~on:' ' with
-  | meth :: path :: _ -> meth, path
-  | _ -> failwith "bad request line"
+  if starts_with line "POST /fraud-score " then Fraud_score
+  else if starts_with line "GET /ready " then Ready
+  else Other
+
+let ascii_lower_code c =
+  let code = Char.to_int c in
+  if code >= Char.to_int 'A' && code <= Char.to_int 'Z' then code + 32 else code
+
+let caseless_equal_at line prefix =
+  let line_len = String.length line in
+  let prefix_len = String.length prefix in
+  line_len >= prefix_len
+  &&
+  let rec loop i =
+    i = prefix_len || (ascii_lower_code line.[i] = Char.to_int prefix.[i] && loop (i + 1))
+  in
+  loop 0
+
+let skip_header_ws line i =
+  let len = String.length line in
+  let rec loop i =
+    if i < len && (Char.equal line.[i] ' ' || Char.equal line.[i] '\t')
+    then loop (i + 1)
+    else i
+  in
+  loop i
+
+let parse_header_int line i =
+  let len = String.length line in
+  let rec loop i acc =
+    if i < len
+    then (
+      let c = line.[i] in
+      if Char.(c >= '0' && c <= '9')
+      then loop (i + 1) ((acc * 10) + Char.to_int c - Char.to_int '0')
+      else acc)
+    else acc
+  in
+  loop (skip_header_ws line i) 0
+
+let value_is_close line i =
+  let i = skip_header_ws line i in
+  i + 5 <= String.length line
+  && ascii_lower_code line.[i] = Char.to_int 'c'
+  && ascii_lower_code line.[i + 1] = Char.to_int 'l'
+  && ascii_lower_code line.[i + 2] = Char.to_int 'o'
+  && ascii_lower_code line.[i + 3] = Char.to_int 's'
+  && ascii_lower_code line.[i + 4] = Char.to_int 'e'
 
 let parse_header line =
-  match String.lsplit2 line ~on:':' with
-  | Some (name, value) when String.Caseless.equal name "content-length" ->
-    `Content_length (String.strip value |> Int.of_string)
-  | Some (name, value) when String.Caseless.equal name "connection" ->
-    `Connection_close (String.Caseless.equal (String.strip value) "close")
-  | _ -> `Other
+  if caseless_equal_at line "content-length:"
+  then `Content_length (parse_header_int line 15)
+  else if caseless_equal_at line "connection:"
+  then `Connection_close (value_is_close line 11)
+  else `Other
 
 let read_headers reader =
   Reader.read_line reader
   >>= function
   | `Eof -> return None
   | `Ok request_line ->
-    let meth, path = parse_request_line request_line in
+    let route = parse_request_line request_line in
     let rec loop content_length close =
       Reader.read_line reader
       >>= function
       | `Eof -> return None
-      | `Ok "" -> return (Some { meth; path; content_length; close })
+      | `Ok "" -> return (Some { route; content_length; close })
       | `Ok line ->
         (match parse_header line with
          | `Content_length content_length -> loop content_length close
@@ -119,12 +177,12 @@ let rec handle_connection config index reader writer =
     >>= (function
      | None -> write_and_close writer bad_request_response
      | Some body ->
-       (match request.meth, request.path with
-        | "GET", "/ready" ->
+       (match request.route with
+        | Ready ->
           ensure_warmed index;
           let response = if request.close then ready_response_close else ready_response in
           write_response_or_continue config index reader writer request response
-        | "POST", "/fraud-score" ->
+        | Fraud_score ->
           (try
             ensure_warmed index;
             let query = Vectorize.to_quantized config body in
@@ -137,7 +195,7 @@ let rec handle_connection config index reader writer =
             write_response_or_continue config index reader writer request response
           with
           | _ -> write_and_close writer bad_request_response)
-        | _ ->
+        | Other ->
           let response =
             if request.close then not_found_response_close else not_found_response
           in
