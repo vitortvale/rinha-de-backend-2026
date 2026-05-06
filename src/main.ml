@@ -199,6 +199,15 @@ let set_socket_options socket =
   with
   | _ -> ()
 
+let tcp_reuseport_socket () =
+  try
+    let socket = Socket.create Socket.Type.tcp in
+    Socket.setopt socket Socket.Opt.reuseaddr true;
+    Socket.setopt socket Socket.Opt.reuseport true;
+    Some socket
+  with
+  | _ -> None
+
 let rec handle_connection config index state reader writer =
   read_headers reader
   >>= function
@@ -246,7 +255,7 @@ let main () =
   let index = Index.load data_dir in
   ensure_warmed index;
   let tcp_port = Sys.getenv "TCP_PORT" |> Option.map ~f:Int.of_string in
-  let start_server where =
+  let start_server ?socket where =
     Tcp.Server.create
       ~buffer_age_limit:`Unlimited
       ~backlog:4096
@@ -256,13 +265,15 @@ let main () =
       ~writer_buffer_size:512
       ~on_socket_accepted:set_socket_options
       ~on_handler_error:`Ignore
+      ?socket
       where
       (fun _addr reader writer ->
         handle_connection config index (create_connection_state index) reader writer)
   in
   match tcp_port with
   | Some port ->
-    start_server (Tcp.Where_to_listen.of_port port)
+    let socket = tcp_reuseport_socket () in
+    start_server ?socket (Tcp.Where_to_listen.of_port port)
     >>= fun _server -> Deferred.never ()
   | None ->
     (try Core_unix.unlink socket_path with
