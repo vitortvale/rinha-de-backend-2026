@@ -8,7 +8,7 @@ type t =
   ; max_km : float
   ; max_tx_count_24h : float
   ; max_merchant_avg_amount : float
-  ; mcc_risk : float String.Table.t
+  ; mcc_risk : float array
   }
 
 let[@zero_alloc] is_space = function
@@ -48,9 +48,23 @@ let parse_number_at s i =
   Float.of_string (String.sub s ~pos:i ~len:(j - i)), j
 
 let number s key = parse_number_at s (value_start s key) |> fst
+let default_mcc_risk = 0.5
+
+let mcc_code_of_slice s start len =
+  if len <> 4
+  then -1
+  else (
+    let rec loop i acc =
+      if i = len
+      then acc
+      else (
+        let digit = Char.to_int s.[start + i] - Char.to_int '0' in
+        if digit < 0 || digit > 9 then -1 else loop (i + 1) ((acc * 10) + digit))
+    in
+    loop 0 0)
 
 let parse_risks s =
-  let tbl = String.Table.create () in
+  let risks = Array.create ~len:10000 default_mcc_risk in
   let len = String.length s in
   let rec loop i =
     let i = skip_ws s i in
@@ -60,19 +74,19 @@ let parse_risks s =
       match String.index_from s (i + 1) '"' with
       | None -> ()
       | Some key_end ->
-        let key = String.sub s ~pos:(i + 1) ~len:(key_end - i - 1) in
+        let code = mcc_code_of_slice s (i + 1) (key_end - i - 1) in
         let value_i =
           match String.index_from s key_end ':' with
           | Some colon -> skip_ws s (colon + 1)
           | None -> failwith "bad mcc_risk entry"
         in
         let value, next = parse_number_at s value_i in
-        Hashtbl.set tbl ~key ~data:value;
+        if code >= 0 && code < Array.length risks then risks.(code) <- value;
         loop next)
     else loop (i + 1)
   in
   loop 0;
-  tbl
+  risks
 
 let load data_dir =
   let normalization = In_channel.read_all (Filename.concat data_dir "normalization.json") in
@@ -87,4 +101,9 @@ let load data_dir =
   ; mcc_risk = parse_risks risks
   }
 
-let mcc_risk t mcc = Hashtbl.find t.mcc_risk mcc |> Option.value ~default:0.5
+let mcc_risk_code t code =
+  if code >= 0 && code < Array.length t.mcc_risk
+  then t.mcc_risk.(code)
+  else default_mcc_risk
+
+let mcc_risk t mcc = mcc_risk_code t (mcc_code_of_slice mcc 0 (String.length mcc))

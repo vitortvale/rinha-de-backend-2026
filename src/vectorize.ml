@@ -49,11 +49,26 @@ let skip_ws s i =
   let rec loop i = if i < len && is_space s.[i] then loop (i + 1) else i in
   loop i
 
+let string_equal_at s pos key key_len =
+  let rec loop offset =
+    offset = key_len || (Char.equal s.[pos + offset] key.[offset] && loop (offset + 1))
+  in
+  loop 0
+
 let find_key ?(from = 0) s key =
-  let pattern = "\"" ^ key ^ "\"" in
-  match String.substr_index ~pos:from s ~pattern with
-  | Some i -> i + String.length pattern
-  | None -> failwith ("missing json key: " ^ key)
+  let len = String.length s in
+  let key_len = String.length key in
+  let stop = len - key_len - 2 in
+  let rec loop i =
+    if i > stop
+    then failwith ("missing json key: " ^ key)
+    else if Char.equal s.[i] '"'
+            && Char.equal s.[i + key_len + 1] '"'
+            && string_equal_at s (i + 1) key key_len
+    then i + key_len + 2
+    else loop (i + 1)
+  in
+  loop from
 
 let value_start ?(from = 0) s key =
   let len = String.length s in
@@ -83,17 +98,40 @@ let parse_number_at s i =
   Float.of_string (String.sub s ~pos:i ~len:(j - i)), j
 
 let number ?from s key = parse_number_at s (value_start ?from s key) |> fst
-let int ?from s key = Float.to_int (number ?from s key)
 
-let string ?from s key =
-  let i = value_start ?from s key in
-  if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
+let parse_int_at s i =
+  let len = String.length s in
+  let sign, i =
+    if i < len && Char.equal s.[i] '-'
+    then -1, i + 1
+    else if i < len && Char.equal s.[i] '+'
+    then 1, i + 1
+    else 1, i
+  in
+  let rec loop j acc =
+    if j < len
+    then (
+      let digit = Char.to_int s.[j] - Char.to_int '0' in
+      if digit >= 0 && digit <= 9 then loop (j + 1) ((acc * 10) + digit) else sign * acc)
+    else sign * acc
+  in
+  loop i 0
+
+let int ?from s key = parse_int_at s (value_start ?from s key)
+
+let string_end s i =
   let rec loop j =
     if j >= String.length s then failwith "unterminated string";
     if Char.equal s.[j] '"' && not (Char.equal s.[j - 1] '\\') then j else loop (j + 1)
   in
-  let j = loop (i + 1) in
-  String.sub s ~pos:(i + 1) ~len:(j - i - 1)
+  loop i
+
+let string_bounds ?from s key =
+  let i = value_start ?from s key in
+  if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
+  let start = i + 1 in
+  let stop = string_end s start in
+  start, stop - start
 
 let bool ?from s key =
   let i = value_start ?from s key in
@@ -112,31 +150,20 @@ let is_null_at s i =
   && Char.equal s.[i + 2] 'l'
   && Char.equal s.[i + 3] 'l'
 
-let object_bounds ?(from = 0) s key =
+let object_start ?(from = 0) s key =
   let start = value_start ~from s key in
   if not (Char.equal s.[start] '{') then failwith ("expected object: " ^ key);
-  let rec loop i depth in_string escaped =
-    if i >= String.length s
-    then failwith "unterminated object"
-    else (
-      let c = s.[i] in
-      if in_string
-      then (
-        let escaped' = (not escaped) && Char.equal c '\\' in
-        let in_string' = if (not escaped) && Char.equal c '"' then false else true in
-        loop (i + 1) depth in_string' escaped')
-      else (
-        match c with
-        | '"' -> loop (i + 1) depth true false
-        | '{' -> loop (i + 1) (depth + 1) false false
-        | '}' ->
-          let depth = depth - 1 in
-          if depth = 0 then start, i else loop (i + 1) depth false false
-        | _ -> loop (i + 1) depth false false))
-  in
-  loop start 0 false false
+  start
 
-let array_contains_string ?from s key needle =
+let slice_equal_at left_s left right_s right len =
+  let rec loop offset =
+    offset = len
+    || (Char.equal left_s.[left + offset] right_s.[right + offset]
+        && loop (offset + 1))
+  in
+  loop 0
+
+let array_contains_string_slice ?from s key needle_start needle_len =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '[') then failwith ("expected array: " ^ key);
   let rec loop i =
@@ -146,13 +173,31 @@ let array_contains_string ?from s key needle =
       match s.[i] with
       | ']' -> false
       | '"' ->
-        let j = Option.value_exn (String.index_from s (i + 1) '"') in
-        if String.equal needle (String.sub s ~pos:(i + 1) ~len:(j - i - 1))
+        let start = i + 1 in
+        let stop = string_end s start in
+        if stop - start = needle_len && slice_equal_at s start s needle_start needle_len
         then true
-        else loop (j + 1)
+        else loop (stop + 1)
       | _ -> loop (i + 1))
   in
   loop (i + 1)
+
+let mcc_code_of_slice s start len =
+  if len <> 4
+  then -1
+  else (
+    let rec loop i acc =
+      if i = len
+      then acc
+      else (
+        let digit = Char.to_int s.[start + i] - Char.to_int '0' in
+        if digit < 0 || digit > 9 then -1 else loop (i + 1) ((acc * 10) + digit))
+    in
+    loop 0 0)
+
+let mcc_code ?from s key =
+  let start, len = string_bounds ?from s key in
+  mcc_code_of_slice s start len
 
 let timestamp_value_parts ?from s key =
   let i = value_start ?from s key in
@@ -223,10 +268,10 @@ let to_float_array config tx =
   |]
 
 let to_quantized config body =
-  let transaction_start, _ = object_bounds body "transaction" in
-  let customer_start, _ = object_bounds body "customer" in
-  let merchant_start, _ = object_bounds body "merchant" in
-  let terminal_start, _ = object_bounds body "terminal" in
+  let transaction_start = object_start body "transaction" in
+  let customer_start = object_start body "customer" in
+  let merchant_start = object_start body "merchant" in
+  let terminal_start = object_start body "terminal" in
   let amount = number ~from:transaction_start body "amount" in
   let installments = int ~from:transaction_start body "installments" in
   let requested_hour, requested_day_of_week, requested_epoch_minutes =
@@ -234,14 +279,19 @@ let to_quantized config body =
   in
   let customer_avg_amount = number ~from:customer_start body "avg_amount" in
   let tx_count_24h = int ~from:customer_start body "tx_count_24h" in
-  let merchant_id = string ~from:merchant_start body "id" in
-  let merchant_mcc = string ~from:merchant_start body "mcc" in
+  let merchant_id_start, merchant_id_len = string_bounds ~from:merchant_start body "id" in
+  let merchant_mcc = mcc_code ~from:merchant_start body "mcc" in
   let merchant_avg_amount = number ~from:merchant_start body "avg_amount" in
   let is_online = bool ~from:terminal_start body "is_online" in
   let card_present = bool ~from:terminal_start body "card_present" in
   let km_from_home = number ~from:terminal_start body "km_from_home" in
   let known_merchant =
-    array_contains_string ~from:customer_start body "known_merchants" merchant_id
+    array_contains_string_slice
+      ~from:customer_start
+      body
+      "known_merchants"
+      merchant_id_start
+      merchant_id_len
   in
   let minutes_since_last_transaction, km_from_last_transaction =
     let i = value_start body "last_transaction" in
@@ -271,7 +321,7 @@ let to_quantized config body =
    ; quantize_clamped (if is_online then 1. else 0.)
    ; quantize_clamped (if card_present then 1. else 0.)
    ; quantize_clamped (if known_merchant then 0. else 1.)
-   ; quantize_clamped (Config.mcc_risk config merchant_mcc)
+   ; quantize_clamped (Config.mcc_risk_code config merchant_mcc)
    ; quantize_clamped
        (clamp (merchant_avg_amount /. config.Config.max_merchant_avg_amount))
   |]

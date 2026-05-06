@@ -8,8 +8,9 @@ type t =
   ; max_km : float
   ; max_tx_count_24h : float
   ; max_merchant_avg_amount : float
-  ; mcc_risk : float String.Table.t
+  ; mcc_risk : float array
   }
 
 val load : string -> t
 val mcc_risk : t -> string -> float
+val mcc_risk_code : t -> int -> float
