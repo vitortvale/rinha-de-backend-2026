@@ -26,7 +26,7 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "4"
+      IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
@@ -51,7 +51,7 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "4"
+      IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
