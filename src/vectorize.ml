@@ -250,12 +250,47 @@ let[@inline always] string_end s i =
   in
   loop i
 
+let[@inline always] next_value s i =
+  let len = String.length s in
+  let rec loop i =
+    if i >= len
+    then failwith "missing json value"
+    else (
+      match s.[i] with
+      | ':' -> skip_ws s (i + 1)
+      | _ -> loop (i + 1))
+  in
+  loop i
+
 let[@inline always] string_bounds ?from s key =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
   let start = i + 1 in
   let stop = string_end s start in
   start, stop - start
+
+let[@inline always] skip_string_value s i =
+  if not (Char.equal s.[i] '"') then failwith "expected string";
+  string_end s (i + 1) + 1
+
+let[@inline always] string_bounds_at s i =
+  if not (Char.equal s.[i] '"') then failwith "expected string";
+  let start = i + 1 in
+  let stop = string_end s start in
+  start, stop - start
+
+let[@inline always] skip_array_value s i =
+  if not (Char.equal s.[i] '[') then failwith "expected array";
+  let rec loop i =
+    if i >= String.length s
+    then failwith "unterminated array"
+    else (
+      match s.[i] with
+      | ']' -> i + 1
+      | '"' -> loop (string_end s (i + 1) + 1)
+      | _ -> loop (i + 1))
+  in
+  loop (i + 1)
 
 let[@inline always] bool ?from s key =
   let i = value_start ?from s key in
@@ -306,6 +341,24 @@ let[@inline always] array_contains_string_slice ?from s key needle_start needle_
   in
   loop (i + 1)
 
+let[@inline always] array_contains_string_slice_at s i needle_start needle_len =
+  if not (Char.equal s.[i] '[') then failwith "expected array";
+  let rec loop i =
+    if i >= String.length s
+    then false
+    else (
+      match s.[i] with
+      | ']' -> false
+      | '"' ->
+        let start = i + 1 in
+        let stop = string_end s start in
+        if stop - start = needle_len && slice_equal_at s start s needle_start needle_len
+        then true
+        else loop (stop + 1)
+      | _ -> loop (i + 1))
+  in
+  loop (i + 1)
+
 let[@inline always] mcc_code_of_slice s start len =
   if len <> 4
   then -1
@@ -323,10 +376,20 @@ let[@inline always] mcc_code ?from s key =
   let start, len = string_bounds ?from s key in
   mcc_code_of_slice s start len
 
+let[@inline always] mcc_code_at s i =
+  if not (Char.equal s.[i] '"') then failwith "expected mcc string";
+  mcc_code_of_slice s (i + 1) 4
+
 let[@inline always] timestamp_value_parts ?from s key =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
   timestamp_parts_at s (i + 1)
+
+let[@inline always] timestamp_parts_value_at s i =
+  if not (Char.equal s.[i] '"') then failwith "expected timestamp string";
+  timestamp_parts_at s (i + 1)
+
+let[@inline always] bool_at s i = Char.equal s.[i] 't'
 
 let amount config tx = clamp (tx.Runtime_json.amount /. config.Config.max_amount)
 
@@ -392,41 +455,55 @@ let to_float_array config tx =
   |]
 
 let to_quantized_into config body query =
-  let transaction_start = object_start body "transaction" in
-  let customer_start = object_start body "customer" in
-  let merchant_start = object_start body "merchant" in
-  let terminal_start = object_start body "terminal" in
-  let amount = number ~from:transaction_start body "amount" in
-  let installments = int ~from:transaction_start body "installments" in
+  let id_start = next_value body 0 in
+  let transaction_start = next_value body (skip_string_value body id_start) in
+  let amount_start = next_value body transaction_start in
+  let installments_start = next_value body amount_start in
+  let requested_at_start = next_value body installments_start in
+  let amount = parse_number_value_at body amount_start in
+  let installments = parse_int_at body installments_start in
   let requested_hour, requested_day_of_week, requested_epoch_minutes =
-    timestamp_value_parts ~from:transaction_start body "requested_at"
+    timestamp_parts_value_at body requested_at_start
   in
-  let customer_avg_amount = number ~from:customer_start body "avg_amount" in
-  let tx_count_24h = int ~from:customer_start body "tx_count_24h" in
-  let merchant_id_start, merchant_id_len = string_bounds ~from:merchant_start body "id" in
-  let merchant_mcc = mcc_code ~from:merchant_start body "mcc" in
-  let merchant_avg_amount = number ~from:merchant_start body "avg_amount" in
-  let is_online = bool ~from:terminal_start body "is_online" in
-  let card_present = bool ~from:terminal_start body "card_present" in
-  let km_from_home = number ~from:terminal_start body "km_from_home" in
+  let customer_start = next_value body (skip_string_value body requested_at_start) in
+  let customer_avg_amount_start = next_value body customer_start in
+  let tx_count_24h_start = next_value body customer_avg_amount_start in
+  let known_merchants_start = next_value body tx_count_24h_start in
+  let customer_avg_amount = parse_number_value_at body customer_avg_amount_start in
+  let tx_count_24h = parse_int_at body tx_count_24h_start in
+  let merchant_start = next_value body (skip_array_value body known_merchants_start) in
+  let merchant_id_value_start = next_value body merchant_start in
+  let merchant_mcc_start = next_value body (skip_string_value body merchant_id_value_start) in
+  let merchant_avg_amount_start = next_value body (skip_string_value body merchant_mcc_start) in
+  let merchant_id_start, merchant_id_len = string_bounds_at body merchant_id_value_start in
+  let merchant_mcc = mcc_code_at body merchant_mcc_start in
+  let merchant_avg_amount = parse_number_value_at body merchant_avg_amount_start in
+  let terminal_start = next_value body merchant_avg_amount_start in
+  let is_online_start = next_value body terminal_start in
+  let card_present_start = next_value body is_online_start in
+  let km_from_home_start = next_value body card_present_start in
+  let is_online = bool_at body is_online_start in
+  let card_present = bool_at body card_present_start in
+  let km_from_home = parse_number_value_at body km_from_home_start in
   let known_merchant =
-    array_contains_string_slice
-      ~from:customer_start
+    array_contains_string_slice_at
       body
-      "known_merchants"
+      known_merchants_start
       merchant_id_start
       merchant_id_len
   in
   let minutes_since_last_transaction, km_from_last_transaction =
-    let i = value_start body "last_transaction" in
+    let i = next_value body km_from_home_start in
     if is_null_at body i
     then -1., -1.
     else (
-      let _, _, last_epoch_minutes = timestamp_value_parts ~from:i body "timestamp" in
+      let timestamp_start = next_value body i in
+      let km_from_current_start = next_value body (skip_string_value body timestamp_start) in
+      let _, _, last_epoch_minutes = timestamp_parts_value_at body timestamp_start in
       ( clamp
           (Float.of_int (requested_epoch_minutes - last_epoch_minutes)
            /. config.Config.max_minutes)
-      , clamp (number ~from:i body "km_from_current" /. config.Config.max_km) ))
+      , clamp (parse_number_value_at body km_from_current_start /. config.Config.max_km) ))
   in
   query.(0) <- quantize_clamped (clamp (amount /. config.Config.max_amount));
   query.(1)
