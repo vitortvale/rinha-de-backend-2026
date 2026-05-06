@@ -9,6 +9,7 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "4"
       IVF_NPROBE: "24"
+      OCAMLRUNPARAM: "s=512k,o=120"
     deploy:
       resources:
         limits:
@@ -28,6 +29,7 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "4"
       IVF_NPROBE: "24"
+      OCAMLRUNPARAM: "s=512k,o=120"
     deploy:
       resources:
         limits:
