@@ -6,6 +6,9 @@
     -rounds
     2
     -unbox-closures
+    -unsafe
+    -llvm-flags
+    "-march=haswell -mtune=haswell"
     -flambda2-result-types-all-functions
     -flambda2-join-points
     -zero-alloc-check
