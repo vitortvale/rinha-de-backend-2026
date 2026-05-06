@@ -29,8 +29,24 @@ type t =
   ; ivf_fast_nprobe : int
   }
 
+type scorer =
+  { top_dist : float array
+  ; top_idx : int array
+  ; best_dist : int array
+  ; best_label : int array
+  }
+
 let reference_rows = 3_000_000
 let k = 5
+
+let create_scorer t =
+  let max_nprobe = Int.max t.ivf_nprobe t.ivf_fast_nprobe in
+  { top_dist = Array.create ~len:max_nprobe Float.infinity
+  ; top_idx = Array.create ~len:max_nprobe 0
+  ; best_dist = Array.create ~len:k Int.max_value
+  ; best_label = Array.create ~len:k 0
+  }
+;;
 
 let validate_size path expected_bytes =
   let actual_bytes = (Std_unix.stat path).st_size in
@@ -289,7 +305,33 @@ let centroid_ivf_blocks_base t =
 
 let centroid_ivf_offset t centroid = t.centroid_ivf_offsets.(centroid)
 
-let centroid_ivf_top_centroids t q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 n =
+let reset_best (best_dist @ local) (best_label @ local) =
+  for i = 0 to k - 1 do
+    best_dist.(i) <- Int.max_value;
+    best_label.(i) <- 0
+  done
+;;
+
+let centroid_ivf_top_centroids
+  t
+  (top_dist @ local)
+  (top_idx @ local)
+  q0
+  q1
+  q2
+  q3
+  q4
+  q5
+  q6
+  q7
+  q8
+  q9
+  q10
+  q11
+  q12
+  q13
+  n
+  =
   let centroids = t.centroid_ivf_centroids in
   let centroid_k = t.centroid_ivf_k in
   let c1_base = centroid_k in
@@ -305,8 +347,24 @@ let centroid_ivf_top_centroids t q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 n
   let c11_base = c10_base + centroid_k in
   let c12_base = c11_base + centroid_k in
   let c13_base = c12_base + centroid_k in
-  let top_dist = Array.create ~len:n Float.infinity in
-  let top_idx = Array.create ~len:n 0 in
+  let q0 = Float.of_int q0 *. 0.0001 in
+  let q1 = Float.of_int q1 *. 0.0001 in
+  let q2 = Float.of_int q2 *. 0.0001 in
+  let q3 = Float.of_int q3 *. 0.0001 in
+  let q4 = Float.of_int q4 *. 0.0001 in
+  let q5 = Float.of_int q5 *. 0.0001 in
+  let q6 = Float.of_int q6 *. 0.0001 in
+  let q7 = Float.of_int q7 *. 0.0001 in
+  let q8 = Float.of_int q8 *. 0.0001 in
+  let q9 = Float.of_int q9 *. 0.0001 in
+  let q10 = Float.of_int q10 *. 0.0001 in
+  let q11 = Float.of_int q11 *. 0.0001 in
+  let q12 = Float.of_int q12 *. 0.0001 in
+  let q13 = Float.of_int q13 *. 0.0001 in
+  for i = 0 to n - 1 do
+    top_dist.(i) <- Float.infinity;
+    top_idx.(i) <- 0
+  done;
   for centroid = 0 to centroid_k - 1 do
     let d0 = centroids.(centroid) -. q0 in
     let d1 = centroids.(c1_base + centroid) -. q1 in
@@ -353,10 +411,10 @@ let centroid_ivf_top_centroids t q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 n
           top_dist.(pos) <- dist;
           top_idx.(pos) <- centroid)))
   done;
-  top_idx
+  ()
 ;;
 
-let centroid_ivf_add_candidate_label best_dist best_label label dist =
+let centroid_ivf_add_candidate_label (best_dist @ local) (best_label @ local) label dist =
   if dist < best_dist.(k - 1)
   then (
     let rec insert pos =
@@ -377,7 +435,7 @@ let sq_diff value query =
   diff * diff
 ;;
 
-let centroid_ivf_scan_probe t query best_dist best_label centroid =
+let centroid_ivf_scan_probe t query (best_dist @ local) (best_label @ local) centroid =
   let start_block = centroid_ivf_offset t centroid in
   let stop_block = centroid_ivf_offset t (centroid + 1) in
   let blocks_base = centroid_ivf_blocks_base t in
@@ -585,7 +643,7 @@ let centroid_ivf_scan_probe t query best_dist best_label centroid =
   done
 ;;
 
-let score_frauds_centroid_ivf_nprobe t query nprobe =
+let score_frauds_centroid_ivf_nprobe t scorer query nprobe =
   let q0 = query.(0) - 10_000 in
   let q1 = query.(1) - 10_000 in
   let q2 = query.(2) - 10_000 in
@@ -600,38 +658,41 @@ let score_frauds_centroid_ivf_nprobe t query nprobe =
   let q11 = query.(11) - 10_000 in
   let q12 = query.(12) - 10_000 in
   let q13 = query.(13) - 10_000 in
-  let probes =
-    centroid_ivf_top_centroids
-      t
-      (Float.of_int q0 *. 0.0001)
-      (Float.of_int q1 *. 0.0001)
-      (Float.of_int q2 *. 0.0001)
-      (Float.of_int q3 *. 0.0001)
-      (Float.of_int q4 *. 0.0001)
-      (Float.of_int q5 *. 0.0001)
-      (Float.of_int q6 *. 0.0001)
-      (Float.of_int q7 *. 0.0001)
-      (Float.of_int q8 *. 0.0001)
-      (Float.of_int q9 *. 0.0001)
-      (Float.of_int q10 *. 0.0001)
-      (Float.of_int q11 *. 0.0001)
-      (Float.of_int q12 *. 0.0001)
-      (Float.of_int q13 *. 0.0001)
-      nprobe
-  in
-  let best_dist = Array.create ~len:k Int.max_value in
-  let best_label = Array.create ~len:k 0 in
-  for i = 0 to Array.length probes - 1 do
-    centroid_ivf_scan_probe t query best_dist best_label probes.(i)
+  centroid_ivf_top_centroids
+    t
+    scorer.top_dist
+    scorer.top_idx
+    q0
+    q1
+    q2
+    q3
+    q4
+    q5
+    q6
+    q7
+    q8
+    q9
+    q10
+    q11
+    q12
+    q13
+    nprobe;
+  reset_best scorer.best_dist scorer.best_label;
+  for i = 0 to nprobe - 1 do
+    centroid_ivf_scan_probe t query scorer.best_dist scorer.best_label scorer.top_idx.(i)
   done;
-  frauds_of_labels best_label
+  frauds_of_labels scorer.best_label
+;;
+
+let score_frauds_centroid_ivf_with_scorer t scorer query =
+  let fast = score_frauds_centroid_ivf_nprobe t scorer query t.ivf_fast_nprobe in
+  if fast = 0 || fast = k
+  then fast
+  else score_frauds_centroid_ivf_nprobe t scorer query t.ivf_nprobe
 ;;
 
 let score_frauds_centroid_ivf t query =
-  let fast = score_frauds_centroid_ivf_nprobe t query t.ivf_fast_nprobe in
-  if fast = 0 || fast = k
-  then fast
-  else score_frauds_centroid_ivf_nprobe t query t.ivf_nprobe
+  score_frauds_centroid_ivf_with_scorer t (create_scorer t) query
 ;;
 
 let prewarm t =
@@ -704,6 +765,10 @@ let score_frauds_vp t query =
   in
   search 0;
   frauds_of_labels best_label
+;;
+
+let score_frauds_with_scorer t scorer query =
+  score_frauds_centroid_ivf_with_scorer t scorer query
 ;;
 
 let score_frauds t query = score_frauds_centroid_ivf t query

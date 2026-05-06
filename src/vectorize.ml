@@ -3,10 +3,10 @@ open Core
 let dim = 14
 let scale = 10000.
 
-let clamp x =
+let[@inline always] clamp x =
   if Float.(x < 0.) then 0. else if Float.(x > 1.) then 1. else x
 
-let quantize_clamped x =
+let[@inline always] quantize_clamped x =
   let y = (x +. 1.) *. scale in
   if Float.(y <= 0.)
   then 0
@@ -14,13 +14,13 @@ let quantize_clamped x =
   then 65535
   else Int.of_float (y +. 0.5)
 
-let int2 s pos =
+let[@inline always] int2 s pos =
   ((Char.to_int s.[pos] - Char.to_int '0') * 10)
   + (Char.to_int s.[pos + 1] - Char.to_int '0')
 
-let int4 s pos = (int2 s pos * 100) + int2 s (pos + 2)
+let[@inline always] int4 s pos = (int2 s pos * 100) + int2 s (pos + 2)
 
-let days_from_civil year month day =
+let[@inline always] days_from_civil year month day =
   let year = if month <= 2 then year - 1 else year in
   let era = if year >= 0 then year / 400 else (year - 399) / 400 in
   let yoe = year - (era * 400) in
@@ -29,7 +29,7 @@ let days_from_civil year month day =
   let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
   (era * 146097) + doe - 719468
 
-let timestamp_parts_at s pos =
+let[@inline always] timestamp_parts_at s pos =
   let year = int4 s pos in
   let month = int2 s (pos + 5) in
   let day = int2 s (pos + 8) in
@@ -40,22 +40,22 @@ let timestamp_parts_at s pos =
   let epoch_minutes = (((epoch_days * 24) + hour) * 60) + minute in
   hour, day_of_week, epoch_minutes
 
-let is_space = function
+let[@inline always] is_space = function
   | ' ' | '\n' | '\r' | '\t' -> true
   | _ -> false
 
-let skip_ws s i =
+let[@inline always] skip_ws s i =
   let len = String.length s in
   let rec loop i = if i < len && is_space s.[i] then loop (i + 1) else i in
   loop i
 
-let string_equal_at s pos key key_len =
+let[@inline always] string_equal_at s pos key key_len =
   let rec loop offset =
     offset = key_len || (Char.equal s.[pos + offset] key.[offset] && loop (offset + 1))
   in
   loop 0
 
-let find_key ?(from = 0) s key =
+let[@inline always] find_key ?(from = 0) s key =
   let len = String.length s in
   let key_len = String.length key in
   let stop = len - key_len - 2 in
@@ -70,7 +70,7 @@ let find_key ?(from = 0) s key =
   in
   loop from
 
-let value_start ?(from = 0) s key =
+let[@inline always] value_start ?(from = 0) s key =
   let len = String.length s in
   let rec colon i =
     if i >= len
@@ -83,9 +83,9 @@ let value_start ?(from = 0) s key =
 
 let is_digit_code code = code >= Char.to_int '0' && code <= Char.to_int '9'
 
-let finish_number negative value = if negative then -.value else value
+let[@inline always] finish_number negative value = if negative then -.value else value
 
-let apply_number_exponent negative value exponent_negative exponent =
+let[@inline always] apply_number_exponent negative value exponent_negative exponent =
   let exponent = if exponent_negative then -exponent else exponent in
   finish_number negative (value *. (10. ** Float.of_int exponent))
 
@@ -106,7 +106,7 @@ let rec number_exponent_digits s len negative value exponent_negative j exponent
     else apply_number_exponent negative value exponent_negative exponent)
   else apply_number_exponent negative value exponent_negative exponent
 
-let number_exponent s len negative j value =
+let[@inline always] number_exponent s len negative j value =
   let exp_start = j + 1 in
   if exp_start < len && Char.equal s.[exp_start] '-'
   then number_exponent_digits s len negative value true (exp_start + 1) 0
@@ -147,7 +147,7 @@ let rec number_integer_value s len negative j acc =
     else finish_number negative acc)
   else finish_number negative acc
 
-let parse_number_value_at s i =
+let[@inline always] parse_number_value_at s i =
   let len = String.length s in
   if i < len && Char.equal s.[i] '-'
   then number_integer_value s len true (i + 1) 0.
@@ -221,9 +221,9 @@ let parse_number_at s i =
   in
   (if negative then -.value else value), j
 
-let number ?from s key = parse_number_value_at s (value_start ?from s key)
+let[@inline always] number ?from s key = parse_number_value_at s (value_start ?from s key)
 
-let parse_int_at s i =
+let[@inline always] parse_int_at s i =
   let len = String.length s in
   let sign, i =
     if i < len && Char.equal s.[i] '-'
@@ -241,23 +241,23 @@ let parse_int_at s i =
   in
   loop i 0
 
-let int ?from s key = parse_int_at s (value_start ?from s key)
+let[@inline always] int ?from s key = parse_int_at s (value_start ?from s key)
 
-let string_end s i =
+let[@inline always] string_end s i =
   let rec loop j =
     if j >= String.length s then failwith "unterminated string";
     if Char.equal s.[j] '"' && not (Char.equal s.[j - 1] '\\') then j else loop (j + 1)
   in
   loop i
 
-let string_bounds ?from s key =
+let[@inline always] string_bounds ?from s key =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
   let start = i + 1 in
   let stop = string_end s start in
   start, stop - start
 
-let bool ?from s key =
+let[@inline always] bool ?from s key =
   let i = value_start ?from s key in
   let prefix = "true" in
   let prefix_len = String.length prefix in
@@ -267,19 +267,19 @@ let bool ?from s key =
   in
   i + prefix_len <= String.length s && loop 0
 
-let is_null_at s i =
+let[@inline always] is_null_at s i =
   i + 4 <= String.length s
   && Char.equal s.[i] 'n'
   && Char.equal s.[i + 1] 'u'
   && Char.equal s.[i + 2] 'l'
   && Char.equal s.[i + 3] 'l'
 
-let object_start ?(from = 0) s key =
+let[@inline always] object_start ?(from = 0) s key =
   let start = value_start ~from s key in
   if not (Char.equal s.[start] '{') then failwith ("expected object: " ^ key);
   start
 
-let slice_equal_at left_s left right_s right len =
+let[@inline always] slice_equal_at left_s left right_s right len =
   let rec loop offset =
     offset = len
     || (Char.equal left_s.[left + offset] right_s.[right + offset]
@@ -287,7 +287,7 @@ let slice_equal_at left_s left right_s right len =
   in
   loop 0
 
-let array_contains_string_slice ?from s key needle_start needle_len =
+let[@inline always] array_contains_string_slice ?from s key needle_start needle_len =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '[') then failwith ("expected array: " ^ key);
   let rec loop i =
@@ -306,7 +306,7 @@ let array_contains_string_slice ?from s key needle_start needle_len =
   in
   loop (i + 1)
 
-let mcc_code_of_slice s start len =
+let[@inline always] mcc_code_of_slice s start len =
   if len <> 4
   then -1
   else (
@@ -319,11 +319,11 @@ let mcc_code_of_slice s start len =
     in
     loop 0 0)
 
-let mcc_code ?from s key =
+let[@inline always] mcc_code ?from s key =
   let start, len = string_bounds ?from s key in
   mcc_code_of_slice s start len
 
-let timestamp_value_parts ?from s key =
+let[@inline always] timestamp_value_parts ?from s key =
   let i = value_start ?from s key in
   if not (Char.equal s.[i] '"') then failwith ("expected string: " ^ key);
   timestamp_parts_at s (i + 1)

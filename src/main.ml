@@ -15,6 +15,7 @@ and route =
 
 type connection_state =
   { query : int array
+  ; scorer : Index.scorer
   ; mutable body_bytes : Bytes.t
   ; mutable body_string : string
   }
@@ -62,8 +63,9 @@ let fraud_responses_close =
       ~content_type:"application/json"
       (response_json score))
 
-let create_connection_state () =
+let create_connection_state index =
   { query = Array.create ~len:Vectorize.dim 0
+  ; scorer = Index.create_scorer index
   ; body_bytes = Bytes.create 0
   ; body_string = ""
   }
@@ -215,7 +217,7 @@ let rec handle_connection config index state reader writer =
           (try
             ensure_warmed index;
             Vectorize.to_quantized_into config body state.query;
-            let frauds = Index.score_frauds index state.query in
+            let frauds = Index.score_frauds_with_scorer index state.scorer state.query in
             let response =
               if request.close
               then fraud_responses_close.(frauds)
@@ -256,7 +258,7 @@ let main () =
       ~on_handler_error:`Ignore
       where
       (fun _addr reader writer ->
-        handle_connection config index (create_connection_state ()) reader writer)
+        handle_connection config index (create_connection_state index) reader writer)
   in
   match tcp_port with
   | Some port ->

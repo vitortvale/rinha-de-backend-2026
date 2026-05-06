@@ -136,6 +136,7 @@ let main { data_dir; test_data; limit; repeats } =
   printf "requests=%d\n%!" (Array.length requests);
   let config = Config.load data_dir in
   let index = Index.load_for_bench data_dir in
+  let scorer = Index.create_scorer index in
   let queries = Array.map requests ~f:(Vectorize.to_quantized config) in
   check_ivf_matches_vp index queries;
   run_case "parse" ~repeats requests (fun request ->
@@ -144,14 +145,26 @@ let main { data_dir; test_data; limit; repeats } =
   run_case "quantize" ~repeats requests (fun request ->
     let query = Vectorize.to_quantized config request in
     Float.of_int query.(0));
+  let query = Array.create ~len:Vectorize.dim 0 in
+  run_case "quantize_into" ~repeats requests (fun request ->
+    Vectorize.to_quantized_into config request query;
+    Float.of_int query.(0));
   run_case "score_vp" ~repeats queries (fun query ->
     Float.of_int (Index.score_frauds_vp index query) /. Float.of_int Index.k);
   run_case "score_centroid_ivf" ~repeats queries (fun query ->
-    Float.of_int (Index.score_frauds_centroid_ivf index query) /. Float.of_int Index.k);
-  run_case "score" ~repeats queries (fun query -> Index.score index query);
+    Float.of_int (Index.score_frauds_with_scorer index scorer query)
+    /. Float.of_int Index.k);
+  run_case "score" ~repeats queries (fun query ->
+    Float.of_int (Index.score_frauds_with_scorer index scorer query)
+    /. Float.of_int Index.k);
   run_case "full" ~repeats requests (fun request ->
     let query = Vectorize.to_quantized config request in
-    Index.score index query)
+    Float.of_int (Index.score_frauds_with_scorer index scorer query)
+    /. Float.of_int Index.k);
+  run_case "full_into" ~repeats requests (fun request ->
+    Vectorize.to_quantized_into config request query;
+    Float.of_int (Index.score_frauds_with_scorer index scorer query)
+    /. Float.of_int Index.k)
 ;;
 
 let usage program =
