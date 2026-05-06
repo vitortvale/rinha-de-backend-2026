@@ -190,14 +190,14 @@ let write_and_close writer payload =
   >>= fun () -> Writer.close writer
 
 let set_socket_options socket =
-  match Linux_ext.settcpopt_bool with
-  | Error _ -> ()
-  | Ok set_tcpopt_bool ->
-    (try
-       let fd = Socket.fd socket |> Fd.file_descr_exn in
-       set_tcpopt_bool fd Linux_ext.TCP_QUICKACK true
-     with
-     | _ -> ())
+  try
+    let fd = Socket.fd socket |> Fd.file_descr_exn in
+    Core_unix.setsockopt fd Core_unix.TCP_NODELAY true;
+    match Linux_ext.settcpopt_bool with
+    | Error _ -> ()
+    | Ok set_tcpopt_bool -> set_tcpopt_bool fd Linux_ext.TCP_QUICKACK true
+  with
+  | _ -> ()
 
 let rec handle_connection config index state reader writer =
   read_headers reader
