@@ -14,7 +14,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.22"
+          cpus: "0.20"
           memory: "32MB"
     ulimits:
       nofile:
@@ -26,14 +26,14 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "4"
+      IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.39"
+          cpus: "0.40"
           memory: "159MB"
     ulimits:
       nofile:
@@ -51,14 +51,14 @@ services:
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "4"
+      IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.39"
+          cpus: "0.40"
           memory: "159MB"
     ulimits:
       nofile:
