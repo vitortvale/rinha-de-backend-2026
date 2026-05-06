@@ -71,9 +71,9 @@ let create_connection_state index =
   }
 
 let ensure_body_buffer state len =
-  if Bytes.length state.body_bytes <> len
+  if Bytes.length state.body_bytes < len
   then (
-    let body_bytes = Bytes.create len in
+    let body_bytes = Bytes.create (Int.ceil_pow2 len) in
     state.body_bytes <- body_bytes;
     state.body_string <- Stdlib.Bytes.unsafe_to_string body_bytes)
 
@@ -176,7 +176,8 @@ let read_body state reader len =
   then return (Some "")
   else (
     ensure_body_buffer state len;
-    Reader.really_read reader state.body_bytes
+    (if len < Bytes.length state.body_bytes then Bytes.unsafe_set state.body_bytes len '\000');
+    Reader.really_read reader ~len state.body_bytes
     >>| function
     | `Ok -> Some state.body_string
     | `Eof _ -> None)
