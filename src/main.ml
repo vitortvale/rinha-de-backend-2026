@@ -168,7 +168,7 @@ let write_and_close writer payload =
   write_and_flush writer payload
   >>= fun () -> Writer.close writer
 
-let rec handle_connection config index reader writer =
+let rec handle_connection config index query reader writer =
   read_headers reader
   >>= function
   | None -> Writer.close writer
@@ -181,55 +181,63 @@ let rec handle_connection config index reader writer =
         | Ready ->
           ensure_warmed index;
           let response = if request.close then ready_response_close else ready_response in
-          write_response_or_continue config index reader writer request response
+          write_response_or_continue config index query reader writer request response
         | Fraud_score ->
           (try
             ensure_warmed index;
-            let query = Vectorize.to_quantized config body in
+            Vectorize.to_quantized_into config body query;
             let frauds = Index.score_frauds index query in
             let response =
               if request.close
               then fraud_responses_close.(frauds)
               else fraud_responses.(frauds)
             in
-            write_response_or_continue config index reader writer request response
+            write_response_or_continue config index query reader writer request response
           with
           | _ -> write_and_close writer bad_request_response)
         | Other ->
           let response =
             if request.close then not_found_response_close else not_found_response
           in
-          write_response_or_continue config index reader writer request response))
+          write_response_or_continue config index query reader writer request response))
 
-and write_response_or_continue config index reader writer request payload =
-  if request.close
-  then write_and_close writer payload
-  else (
-    Writer.write writer payload;
-    handle_connection config index reader writer)
+and write_response_or_continue config index query reader writer request payload =
+  write_and_flush writer payload
+  >>= fun () ->
+  if request.close then Writer.close writer else handle_connection config index query reader writer
 
 let main () =
   let data_dir = Sys.getenv "DATA_DIR" |> Option.value ~default:"resources" in
   let socket_path =
     Sys.getenv "SOCKET_PATH" |> Option.value ~default:"/tmp/rinha-api.sock"
   in
-  (try Core_unix.unlink socket_path with
-   | _ -> ());
   let config = Config.load data_dir in
   let index = Index.load data_dir in
-  let where = Tcp.Where_to_listen.of_file socket_path in
-  Tcp.Server.create
-    ~backlog:4096
-    ~max_accepts_per_batch:256
-    ~max_connections:20_000
-    ~reader_buffer_size:4096
-    ~writer_buffer_size:512
-    ~on_handler_error:`Ignore
-    where
-    (fun _addr reader writer -> handle_connection config index reader writer)
-  >>= fun _server ->
-  Core_unix.chmod socket_path ~perm:0o666;
-  Deferred.never ()
+  let tcp_port = Sys.getenv "TCP_PORT" |> Option.map ~f:Int.of_string in
+  let start_server where =
+    Tcp.Server.create
+      ~backlog:4096
+      ~max_accepts_per_batch:256
+      ~max_connections:20_000
+      ~reader_buffer_size:4096
+      ~writer_buffer_size:512
+      ~on_handler_error:`Ignore
+      where
+      (fun _addr reader writer ->
+        let query = Array.create ~len:Vectorize.dim 0 in
+        handle_connection config index query reader writer)
+  in
+  match tcp_port with
+  | Some port ->
+    start_server (Tcp.Where_to_listen.of_port port)
+    >>= fun _server -> Deferred.never ()
+  | None ->
+    (try Core_unix.unlink socket_path with
+     | _ -> ());
+    start_server (Tcp.Where_to_listen.of_file socket_path)
+    >>= fun _server ->
+    Core_unix.chmod socket_path ~perm:0o666;
+    Deferred.never ()
 
 let () =
   Command_unix.run

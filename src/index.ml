@@ -312,45 +312,46 @@ let centroid_ivf_top_centroids t q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 n
     let d1 = centroids.(c1_base + centroid) -. q1 in
     let d2 = centroids.(c2_base + centroid) -. q2 in
     let d3 = centroids.(c3_base + centroid) -. q3 in
-    let d4 = centroids.(c4_base + centroid) -. q4 in
-    let d5 = centroids.(c5_base + centroid) -. q5 in
-    let d6 = centroids.(c6_base + centroid) -. q6 in
-    let d7 = centroids.(c7_base + centroid) -. q7 in
-    let d8 = centroids.(c8_base + centroid) -. q8 in
-    let d9 = centroids.(c9_base + centroid) -. q9 in
-    let d10 = centroids.(c10_base + centroid) -. q10 in
-    let d11 = centroids.(c11_base + centroid) -. q11 in
-    let d12 = centroids.(c12_base + centroid) -. q12 in
-    let d13 = centroids.(c13_base + centroid) -. q13 in
-    let dist =
-      (d0 *. d0)
-      +. (d1 *. d1)
-      +. (d2 *. d2)
-      +. (d3 *. d3)
-      +. (d4 *. d4)
-      +. (d5 *. d5)
-      +. (d6 *. d6)
-      +. (d7 *. d7)
-      +. (d8 *. d8)
-      +. (d9 *. d9)
-      +. (d10 *. d10)
-      +. (d11 *. d11)
-      +. (d12 *. d12)
-      +. (d13 *. d13)
-    in
-    if Stdlib.( < ) dist top_dist.(n - 1)
+    let dist4 = (d0 *. d0) +. (d1 *. d1) +. (d2 *. d2) +. (d3 *. d3) in
+    if Stdlib.( < ) dist4 top_dist.(n - 1)
     then (
-      let rec insert pos =
-        if pos > 0 && Stdlib.( < ) dist top_dist.(pos - 1)
-        then (
-          top_dist.(pos) <- top_dist.(pos - 1);
-          top_idx.(pos) <- top_idx.(pos - 1);
-          insert (pos - 1))
-        else pos
+      let d4 = centroids.(c4_base + centroid) -. q4 in
+      let d5 = centroids.(c5_base + centroid) -. q5 in
+      let d6 = centroids.(c6_base + centroid) -. q6 in
+      let d7 = centroids.(c7_base + centroid) -. q7 in
+      let dist8 =
+        dist4 +. (d4 *. d4) +. (d5 *. d5) +. (d6 *. d6) +. (d7 *. d7)
       in
-      let pos = insert (n - 1) in
-      top_dist.(pos) <- dist;
-      top_idx.(pos) <- centroid)
+      if Stdlib.( < ) dist8 top_dist.(n - 1)
+      then (
+        let d8 = centroids.(c8_base + centroid) -. q8 in
+        let d9 = centroids.(c9_base + centroid) -. q9 in
+        let d10 = centroids.(c10_base + centroid) -. q10 in
+        let d11 = centroids.(c11_base + centroid) -. q11 in
+        let d12 = centroids.(c12_base + centroid) -. q12 in
+        let d13 = centroids.(c13_base + centroid) -. q13 in
+        let dist =
+          dist8
+          +. (d8 *. d8)
+          +. (d9 *. d9)
+          +. (d10 *. d10)
+          +. (d11 *. d11)
+          +. (d12 *. d12)
+          +. (d13 *. d13)
+        in
+        if Stdlib.( < ) dist top_dist.(n - 1)
+        then (
+          let rec insert pos =
+            if pos > 0 && Stdlib.( < ) dist top_dist.(pos - 1)
+            then (
+              top_dist.(pos) <- top_dist.(pos - 1);
+              top_idx.(pos) <- top_idx.(pos - 1);
+              insert (pos - 1))
+            else pos
+          in
+          let pos = insert (n - 1) in
+          top_dist.(pos) <- dist;
+          top_idx.(pos) <- centroid)))
   done;
   top_idx
 ;;

@@ -81,23 +81,147 @@ let value_start ?(from = 0) s key =
   in
   skip_ws s (colon (find_key ~from s key))
 
+let is_digit_code code = code >= Char.to_int '0' && code <= Char.to_int '9'
+
+let finish_number negative value = if negative then -.value else value
+
+let apply_number_exponent negative value exponent_negative exponent =
+  let exponent = if exponent_negative then -exponent else exponent in
+  finish_number negative (value *. (10. ** Float.of_int exponent))
+
+let rec number_exponent_digits s len negative value exponent_negative j exponent =
+  if j < len
+  then (
+    let code = Char.to_int s.[j] in
+    if is_digit_code code
+    then (
+      number_exponent_digits
+        s
+        len
+        negative
+        value
+        exponent_negative
+        (j + 1)
+        ((exponent * 10) + code - Char.to_int '0'))
+    else apply_number_exponent negative value exponent_negative exponent)
+  else apply_number_exponent negative value exponent_negative exponent
+
+let number_exponent s len negative j value =
+  let exp_start = j + 1 in
+  if exp_start < len && Char.equal s.[exp_start] '-'
+  then number_exponent_digits s len negative value true (exp_start + 1) 0
+  else if exp_start < len && Char.equal s.[exp_start] '+'
+  then number_exponent_digits s len negative value false (exp_start + 1) 0
+  else number_exponent_digits s len negative value false exp_start 0
+
+let rec number_fractional_value s len negative j factor acc =
+  if j < len
+  then (
+    let c = s.[j] in
+    let digit = Char.to_int c - Char.to_int '0' in
+    if digit >= 0 && digit <= 9
+    then (
+      number_fractional_value
+        s
+        len
+        negative
+        (j + 1)
+        (factor *. 0.1)
+        (acc +. (Float.of_int digit *. factor)))
+    else if Char.equal c 'e' || Char.equal c 'E'
+    then number_exponent s len negative j acc
+    else finish_number negative acc)
+  else finish_number negative acc
+
+let rec number_integer_value s len negative j acc =
+  if j < len
+  then (
+    let c = s.[j] in
+    let digit = Char.to_int c - Char.to_int '0' in
+    if digit >= 0 && digit <= 9
+    then number_integer_value s len negative (j + 1) ((acc *. 10.) +. Float.of_int digit)
+    else if Char.equal c '.'
+    then number_fractional_value s len negative (j + 1) 0.1 acc
+    else if Char.equal c 'e' || Char.equal c 'E'
+    then number_exponent s len negative j acc
+    else finish_number negative acc)
+  else finish_number negative acc
+
+let parse_number_value_at s i =
+  let len = String.length s in
+  if i < len && Char.equal s.[i] '-'
+  then number_integer_value s len true (i + 1) 0.
+  else if i < len && Char.equal s.[i] '+'
+  then number_integer_value s len false (i + 1) 0.
+  else number_integer_value s len false i 0.
+
+let rec number_integer_part s len j acc =
+  if j < len
+  then (
+    let digit = Char.to_int s.[j] - Char.to_int '0' in
+    if digit >= 0 && digit <= 9
+    then number_integer_part s len (j + 1) ((acc *. 10.) +. Float.of_int digit)
+    else j, acc)
+  else j, acc
+
+let rec number_fractional_part s len j factor acc =
+  if j < len
+  then (
+    let digit = Char.to_int s.[j] - Char.to_int '0' in
+    if digit >= 0 && digit <= 9
+    then (
+      number_fractional_part
+        s
+        len
+        (j + 1)
+        (factor *. 0.1)
+        (acc +. (Float.of_int digit *. factor)))
+    else j, acc)
+  else j, acc
+
+let rec number_exponent_part s len j acc =
+  if j < len
+  then (
+    let code = Char.to_int s.[j] in
+    if is_digit_code code
+    then number_exponent_part s len (j + 1) ((acc * 10) + code - Char.to_int '0')
+    else j, acc)
+  else j, acc
+
 let parse_number_at s i =
   let len = String.length s in
-  let rec loop j =
-    if j < len
-       && (Char.is_digit s.[j]
-           || Char.equal s.[j] '.'
-           || Char.equal s.[j] '-'
-           || Char.equal s.[j] '+'
-           || Char.equal s.[j] 'e'
-           || Char.equal s.[j] 'E')
-    then loop (j + 1)
-    else j
+  let negative, i =
+    if i < len && Char.equal s.[i] '-'
+    then true, i + 1
+    else if i < len && Char.equal s.[i] '+'
+    then false, i + 1
+    else false, i
   in
-  let j = loop i in
-  Float.of_string (String.sub s ~pos:i ~len:(j - i)), j
+  let j, value = number_integer_part s len i 0. in
+  let j, value =
+    if j < len && Char.equal s.[j] '.'
+    then number_fractional_part s len (j + 1) 0.1 value
+    else j, value
+  in
+  let j, value =
+    if j < len && (Char.equal s.[j] 'e' || Char.equal s.[j] 'E')
+    then (
+      let exp_start = j + 1 in
+      let exp_negative, exp_start =
+        if exp_start < len && Char.equal s.[exp_start] '-'
+        then true, exp_start + 1
+        else if exp_start < len && Char.equal s.[exp_start] '+'
+        then false, exp_start + 1
+        else false, exp_start
+      in
+      let j, exponent = number_exponent_part s len exp_start 0 in
+      let exponent = if exp_negative then -exponent else exponent in
+      j, value *. (10. ** Float.of_int exponent))
+    else j, value
+  in
+  (if negative then -.value else value), j
 
-let number ?from s key = parse_number_at s (value_start ?from s key) |> fst
+let number ?from s key = parse_number_value_at s (value_start ?from s key)
 
 let parse_int_at s i =
   let len = String.length s in
@@ -267,7 +391,7 @@ let to_float_array config tx =
    ; merchant_average_amount config tx
   |]
 
-let to_quantized config body =
+let to_quantized_into config body query =
   let transaction_start = object_start body "transaction" in
   let customer_start = object_start body "customer" in
   let merchant_start = object_start body "merchant" in
@@ -304,24 +428,32 @@ let to_quantized config body =
            /. config.Config.max_minutes)
       , clamp (number ~from:i body "km_from_current" /. config.Config.max_km) ))
   in
-  [| quantize_clamped (clamp (amount /. config.Config.max_amount))
-   ; quantize_clamped
-       (clamp (Float.of_int installments /. config.Config.max_installments))
-   ; quantize_clamped
+  query.(0) <- quantize_clamped (clamp (amount /. config.Config.max_amount));
+  query.(1)
+  <- quantize_clamped
+       (clamp (Float.of_int installments /. config.Config.max_installments));
+  query.(2)
+  <- quantize_clamped
        (clamp
           ((amount /. Float.max customer_avg_amount 0.000001)
-           /. config.Config.amount_vs_avg_ratio))
-   ; quantize_clamped (Float.of_int requested_hour /. 23.)
-   ; quantize_clamped (Float.of_int requested_day_of_week /. 6.)
-   ; quantize_clamped minutes_since_last_transaction
-   ; quantize_clamped km_from_last_transaction
-   ; quantize_clamped (clamp (km_from_home /. config.Config.max_km))
-   ; quantize_clamped
-       (clamp (Float.of_int tx_count_24h /. config.Config.max_tx_count_24h))
-   ; quantize_clamped (if is_online then 1. else 0.)
-   ; quantize_clamped (if card_present then 1. else 0.)
-   ; quantize_clamped (if known_merchant then 0. else 1.)
-   ; quantize_clamped (Config.mcc_risk_code config merchant_mcc)
-   ; quantize_clamped
+           /. config.Config.amount_vs_avg_ratio));
+  query.(3) <- quantize_clamped (Float.of_int requested_hour /. 23.);
+  query.(4) <- quantize_clamped (Float.of_int requested_day_of_week /. 6.);
+  query.(5) <- quantize_clamped minutes_since_last_transaction;
+  query.(6) <- quantize_clamped km_from_last_transaction;
+  query.(7) <- quantize_clamped (clamp (km_from_home /. config.Config.max_km));
+  query.(8)
+  <- quantize_clamped
+       (clamp (Float.of_int tx_count_24h /. config.Config.max_tx_count_24h));
+  query.(9) <- quantize_clamped (if is_online then 1. else 0.);
+  query.(10) <- quantize_clamped (if card_present then 1. else 0.);
+  query.(11) <- quantize_clamped (if known_merchant then 0. else 1.);
+  query.(12) <- quantize_clamped (Config.mcc_risk_code config merchant_mcc);
+  query.(13)
+  <- quantize_clamped
        (clamp (merchant_avg_amount /. config.Config.max_merchant_avg_amount))
-  |]
+
+let to_quantized config body =
+  let query = Array.create ~len:dim 0 in
+  to_quantized_into config body query;
+  query

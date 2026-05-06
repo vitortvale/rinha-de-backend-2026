@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    ports:
+      - "9999:9999"
+    environment:
+      TCP_PORT: "9999"
+      DATA_DIR: "/app/data"
+      IVF_FAST_NPROBE: "4"
+      IVF_NPROBE: "24"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "350MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
