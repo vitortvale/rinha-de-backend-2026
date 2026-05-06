@@ -1,0 +1,19 @@
+name: Compose topology
+
+on:
+  push:
+    branches:
+      - submission
+  pull_request:
+    branches:
+      - submission
+
+jobs:
+  compose-topology:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert required Docker Compose topology
+        run: bash scripts/assert-compose-topology.sh
