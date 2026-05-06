@@ -16,6 +16,7 @@ type t =
   ; counts : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
   ; node_count : int
   ; centroid_ivf_index : (int, BA.int8_unsigned_elt, BA.c_layout) A1.t
+  ; centroid_ivf_index_i16 : (int, BA.int16_signed_elt, BA.c_layout) A1.t
   ; centroid_ivf_centroids : float array
   ; centroid_ivf_offsets : int array
   ; centroid_ivf_k : int
@@ -98,6 +99,10 @@ let load data_dir =
   let centroid_ivf_index =
     map_file centroid_ivf_index_path BA.int8_unsigned centroid_ivf_index_len
   in
+  if centroid_ivf_index_len land 1 <> 0 then failwith "bad centroid_ivf index size";
+  let centroid_ivf_index_i16 =
+    map_file centroid_ivf_index_path BA.int16_signed (centroid_ivf_index_len lsr 1)
+  in
   let centroid_ivf_u32 offset =
     let b0 = A1.unsafe_get centroid_ivf_index offset in
     let b1 = A1.unsafe_get centroid_ivf_index (offset + 1) in
@@ -149,6 +154,7 @@ let load data_dir =
   ; counts = map_i32_bytes count_path node_count
   ; node_count
   ; centroid_ivf_index
+  ; centroid_ivf_index_i16
   ; centroid_ivf_centroids
   ; centroid_ivf_offsets
   ; centroid_ivf_k
@@ -269,29 +275,57 @@ let centroid_ivf_blocks_base t =
   centroid_ivf_labels_base t + (t.centroid_ivf_total_blocks * 8)
 ;;
 
-let centroid_ivf_i16 t offset =
-  let b0 = A1.unsafe_get t.centroid_ivf_index offset in
-  let b1 = A1.unsafe_get t.centroid_ivf_index (offset + 1) in
-  let unsigned = b0 lor (b1 lsl 8) in
-  if b1 land 0x80 = 0 then unsigned else unsigned - 0x1_0000
-;;
-
 let centroid_ivf_offset t centroid = t.centroid_ivf_offsets.(centroid)
 
-let centroid_ivf_centroid t dim centroid =
-  t.centroid_ivf_centroids.((dim * t.centroid_ivf_k) + centroid)
-;;
-
-let centroid_ivf_top_centroids t query_float n =
+let centroid_ivf_top_centroids t q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 n =
+  let centroids = t.centroid_ivf_centroids in
+  let centroid_k = t.centroid_ivf_k in
+  let c1_base = centroid_k in
+  let c2_base = c1_base + centroid_k in
+  let c3_base = c2_base + centroid_k in
+  let c4_base = c3_base + centroid_k in
+  let c5_base = c4_base + centroid_k in
+  let c6_base = c5_base + centroid_k in
+  let c7_base = c6_base + centroid_k in
+  let c8_base = c7_base + centroid_k in
+  let c9_base = c8_base + centroid_k in
+  let c10_base = c9_base + centroid_k in
+  let c11_base = c10_base + centroid_k in
+  let c12_base = c11_base + centroid_k in
+  let c13_base = c12_base + centroid_k in
   let top_dist = Array.create ~len:n Float.infinity in
   let top_idx = Array.create ~len:n 0 in
-  for centroid = 0 to t.centroid_ivf_k - 1 do
-    let acc = ref 0. in
-    for dim = 0 to Vectorize.dim - 1 do
-      let diff = centroid_ivf_centroid t dim centroid -. query_float.(dim) in
-      acc := !acc +. (diff *. diff)
-    done;
-    let dist = !acc in
+  for centroid = 0 to centroid_k - 1 do
+    let d0 = centroids.(centroid) -. q0 in
+    let d1 = centroids.(c1_base + centroid) -. q1 in
+    let d2 = centroids.(c2_base + centroid) -. q2 in
+    let d3 = centroids.(c3_base + centroid) -. q3 in
+    let d4 = centroids.(c4_base + centroid) -. q4 in
+    let d5 = centroids.(c5_base + centroid) -. q5 in
+    let d6 = centroids.(c6_base + centroid) -. q6 in
+    let d7 = centroids.(c7_base + centroid) -. q7 in
+    let d8 = centroids.(c8_base + centroid) -. q8 in
+    let d9 = centroids.(c9_base + centroid) -. q9 in
+    let d10 = centroids.(c10_base + centroid) -. q10 in
+    let d11 = centroids.(c11_base + centroid) -. q11 in
+    let d12 = centroids.(c12_base + centroid) -. q12 in
+    let d13 = centroids.(c13_base + centroid) -. q13 in
+    let dist =
+      (d0 *. d0)
+      +. (d1 *. d1)
+      +. (d2 *. d2)
+      +. (d3 *. d3)
+      +. (d4 *. d4)
+      +. (d5 *. d5)
+      +. (d6 *. d6)
+      +. (d7 *. d7)
+      +. (d8 *. d8)
+      +. (d9 *. d9)
+      +. (d10 *. d10)
+      +. (d11 *. d11)
+      +. (d12 *. d12)
+      +. (d13 *. d13)
+    in
     if Stdlib.( < ) dist top_dist.(n - 1)
     then (
       let rec insert pos =
@@ -309,10 +343,9 @@ let centroid_ivf_top_centroids t query_float n =
   top_idx
 ;;
 
-let centroid_ivf_add_candidate t best_dist best_label label_base slot dist =
+let centroid_ivf_add_candidate_label best_dist best_label label dist =
   if dist < best_dist.(k - 1)
   then (
-    let label = A1.unsafe_get t.centroid_ivf_index (label_base + slot) in
     let rec insert pos =
       if pos > 0 && dist < best_dist.(pos - 1)
       then (
@@ -326,18 +359,9 @@ let centroid_ivf_add_candidate t best_dist best_label label_base slot dist =
     best_label.(pos) <- label)
 ;;
 
-let centroid_ivf_slot_distance t query block_base slot limit =
-  let rec loop dim acc =
-    if acc >= limit
-    then acc
-    else if dim = Vectorize.dim
-    then acc
-    else (
-      let value = centroid_ivf_i16 t (block_base + (((dim * 8) + slot) * 2)) in
-      let diff = value - (query.(dim) - 10_000) in
-      loop (dim + 1) (acc + (diff * diff)))
-  in
-  loop 0 0
+let sq_diff value query =
+  let diff = value - query in
+  diff * diff
 ;;
 
 let centroid_ivf_scan_probe t query best_dist best_label centroid =
@@ -345,21 +369,243 @@ let centroid_ivf_scan_probe t query best_dist best_label centroid =
   let stop_block = centroid_ivf_offset t (centroid + 1) in
   let blocks_base = centroid_ivf_blocks_base t in
   let labels_base = centroid_ivf_labels_base t in
+  let blocks_i16 = t.centroid_ivf_index_i16 in
+  let labels = t.centroid_ivf_index in
+  let q0 = query.(0) - 10_000 in
+  let q1 = query.(1) - 10_000 in
+  let q2 = query.(2) - 10_000 in
+  let q3 = query.(3) - 10_000 in
+  let q4 = query.(4) - 10_000 in
+  let q5 = query.(5) - 10_000 in
+  let q6 = query.(6) - 10_000 in
+  let q7 = query.(7) - 10_000 in
+  let q8 = query.(8) - 10_000 in
+  let q9 = query.(9) - 10_000 in
+  let q10 = query.(10) - 10_000 in
+  let q11 = query.(11) - 10_000 in
+  let q12 = query.(12) - 10_000 in
+  let q13 = query.(13) - 10_000 in
   for block = start_block to stop_block - 1 do
-    let block_base = blocks_base + (block * 112 * 2) in
+    let block_base = (blocks_base lsr 1) + (block * 112) in
     let label_base = labels_base + (block * 8) in
-    for slot = 0 to 7 do
-      let dist = centroid_ivf_slot_distance t query block_base slot best_dist.(k - 1) in
-      centroid_ivf_add_candidate t best_dist best_label label_base slot dist
-    done
+    let base1 = block_base + 8 in
+    let base2 = base1 + 8 in
+    let base3 = base2 + 8 in
+    let base4 = base3 + 8 in
+    let base5 = base4 + 8 in
+    let base6 = base5 + 8 in
+    let base7 = base6 + 8 in
+    let base8 = base7 + 8 in
+    let base9 = base8 + 8 in
+    let base10 = base9 + 8 in
+    let base11 = base10 + 8 in
+    let base12 = base11 + 8 in
+    let base13 = base12 + 8 in
+    let dist0 =
+      sq_diff (A1.unsafe_get blocks_i16 block_base) q0
+      + sq_diff (A1.unsafe_get blocks_i16 base1) q1
+      + sq_diff (A1.unsafe_get blocks_i16 base2) q2
+      + sq_diff (A1.unsafe_get blocks_i16 base3) q3
+      + sq_diff (A1.unsafe_get blocks_i16 base4) q4
+      + sq_diff (A1.unsafe_get blocks_i16 base5) q5
+      + sq_diff (A1.unsafe_get blocks_i16 base6) q6
+      + sq_diff (A1.unsafe_get blocks_i16 base7) q7
+      + sq_diff (A1.unsafe_get blocks_i16 base8) q8
+      + sq_diff (A1.unsafe_get blocks_i16 base9) q9
+      + sq_diff (A1.unsafe_get blocks_i16 base10) q10
+      + sq_diff (A1.unsafe_get blocks_i16 base11) q11
+      + sq_diff (A1.unsafe_get blocks_i16 base12) q12
+      + sq_diff (A1.unsafe_get blocks_i16 base13) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels label_base)
+      dist0;
+    let dist1 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 1)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 1)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 1)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 1)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 1)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 1)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 1)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 1)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 1)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 1)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 1)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 1)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 1)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 1)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 1))
+      dist1;
+    let dist2 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 2)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 2)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 2)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 2)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 2)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 2)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 2)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 2)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 2)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 2)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 2)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 2)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 2)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 2)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 2))
+      dist2;
+    let dist3 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 3)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 3)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 3)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 3)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 3)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 3)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 3)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 3)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 3)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 3)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 3)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 3)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 3)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 3)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 3))
+      dist3;
+    let dist4 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 4)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 4)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 4)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 4)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 4)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 4)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 4)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 4)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 4)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 4)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 4)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 4)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 4)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 4)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 4))
+      dist4;
+    let dist5 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 5)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 5)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 5)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 5)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 5)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 5)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 5)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 5)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 5)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 5)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 5)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 5)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 5)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 5)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 5))
+      dist5;
+    let dist6 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 6)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 6)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 6)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 6)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 6)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 6)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 6)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 6)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 6)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 6)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 6)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 6)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 6)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 6)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 6))
+      dist6;
+    let dist7 =
+      sq_diff (A1.unsafe_get blocks_i16 (block_base + 7)) q0
+      + sq_diff (A1.unsafe_get blocks_i16 (base1 + 7)) q1
+      + sq_diff (A1.unsafe_get blocks_i16 (base2 + 7)) q2
+      + sq_diff (A1.unsafe_get blocks_i16 (base3 + 7)) q3
+      + sq_diff (A1.unsafe_get blocks_i16 (base4 + 7)) q4
+      + sq_diff (A1.unsafe_get blocks_i16 (base5 + 7)) q5
+      + sq_diff (A1.unsafe_get blocks_i16 (base6 + 7)) q6
+      + sq_diff (A1.unsafe_get blocks_i16 (base7 + 7)) q7
+      + sq_diff (A1.unsafe_get blocks_i16 (base8 + 7)) q8
+      + sq_diff (A1.unsafe_get blocks_i16 (base9 + 7)) q9
+      + sq_diff (A1.unsafe_get blocks_i16 (base10 + 7)) q10
+      + sq_diff (A1.unsafe_get blocks_i16 (base11 + 7)) q11
+      + sq_diff (A1.unsafe_get blocks_i16 (base12 + 7)) q12
+      + sq_diff (A1.unsafe_get blocks_i16 (base13 + 7)) q13
+    in
+    centroid_ivf_add_candidate_label
+      best_dist
+      best_label
+      (A1.unsafe_get labels (label_base + 7))
+      dist7
   done
 ;;
 
 let score_frauds_centroid_ivf_nprobe t query nprobe =
-  let query_float =
-    Array.init Vectorize.dim ~f:(fun dim -> Float.of_int (query.(dim) - 10_000) *. 0.0001)
+  let q0 = query.(0) - 10_000 in
+  let q1 = query.(1) - 10_000 in
+  let q2 = query.(2) - 10_000 in
+  let q3 = query.(3) - 10_000 in
+  let q4 = query.(4) - 10_000 in
+  let q5 = query.(5) - 10_000 in
+  let q6 = query.(6) - 10_000 in
+  let q7 = query.(7) - 10_000 in
+  let q8 = query.(8) - 10_000 in
+  let q9 = query.(9) - 10_000 in
+  let q10 = query.(10) - 10_000 in
+  let q11 = query.(11) - 10_000 in
+  let q12 = query.(12) - 10_000 in
+  let q13 = query.(13) - 10_000 in
+  let probes =
+    centroid_ivf_top_centroids
+      t
+      (Float.of_int q0 *. 0.0001)
+      (Float.of_int q1 *. 0.0001)
+      (Float.of_int q2 *. 0.0001)
+      (Float.of_int q3 *. 0.0001)
+      (Float.of_int q4 *. 0.0001)
+      (Float.of_int q5 *. 0.0001)
+      (Float.of_int q6 *. 0.0001)
+      (Float.of_int q7 *. 0.0001)
+      (Float.of_int q8 *. 0.0001)
+      (Float.of_int q9 *. 0.0001)
+      (Float.of_int q10 *. 0.0001)
+      (Float.of_int q11 *. 0.0001)
+      (Float.of_int q12 *. 0.0001)
+      (Float.of_int q13 *. 0.0001)
+      nprobe
   in
-  let probes = centroid_ivf_top_centroids t query_float nprobe in
   let best_dist = Array.create ~len:k Int.max_value in
   let best_label = Array.create ~len:k 0 in
   for i = 0 to Array.length probes - 1 do

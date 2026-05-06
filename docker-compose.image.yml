@@ -7,13 +7,19 @@ services:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - sockets:/sockets
     depends_on:
-      - api1
-      - api2
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           cpus: "0.10"
-          memory: "10MB"
+          memory: "32MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
 
   api1:
     image: ${API_IMAGE:-vitortvale/rinha-2026-ocaml:latest}
@@ -28,7 +34,17 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "170MB"
+          memory: "159MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: [ "CMD", "/app/rinha_healthcheck" ]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+      start_period: 1s
 
   api2:
     image: ${API_IMAGE:-vitortvale/rinha-2026-ocaml:latest}
@@ -43,7 +59,17 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "170MB"
+          memory: "159MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: [ "CMD", "/app/rinha_healthcheck" ]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+      start_period: 1s
 
 volumes:
   sockets:
