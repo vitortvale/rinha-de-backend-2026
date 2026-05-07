@@ -28,6 +28,7 @@ services:
       DATA_DIR: "/app/data"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
+      RINHA_TRANSPORT: "epoll"
     volumes:
       - sockets:/sockets
     deploy:
@@ -53,6 +54,7 @@ services:
       DATA_DIR: "/app/data"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
+      RINHA_TRANSPORT: "epoll"
     volumes:
       - sockets:/sockets
     deploy:
