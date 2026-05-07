@@ -18,14 +18,14 @@
  src
  (library
   (name rinha_lib)
-  (libraries core async unix)
+  (libraries core unix)
   (modules config runtime_json time_util vectorize index linear_model))
 
  (executable
   (public_name rinha_api)
   (name main)
   (modules main)
-  (libraries rinha_lib core async unix))
+  (libraries rinha_lib eio eio_main unix))
 
  (executable
   (public_name rinha_healthcheck)

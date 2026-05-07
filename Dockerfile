@@ -1,4 +1,5 @@
-FROM vitortvale/rinha-2026-ocaml-builder:latest AS build
+ARG BUILDER_IMAGE=vitortvale/rinha-2026-ocaml-builder:eio
+FROM ${BUILDER_IMAGE} AS build
 
 WORKDIR /src
 

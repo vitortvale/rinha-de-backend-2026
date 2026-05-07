@@ -4,7 +4,8 @@ depends: [
   "ocaml" {>= "5.2"}
   "dune" {>= "3.11"}
   "core"
-  "async"
+  "eio"
+  "eio_main"
   "odoc" {with-doc}
 ]
 build: [

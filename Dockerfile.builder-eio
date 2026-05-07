@@ -1,0 +1,6 @@
+FROM vitortvale/rinha-2026-ocaml-builder:latest
+
+RUN opam switch set-base --switch=5.2.0+ox ocaml-variants.5.2.0+ox \
+ && eval $(opam env --switch=5.2.0+ox) \
+ && opam install --yes eio_main \
+ && opam clean --all --logs

@@ -9,4 +9,5 @@
   (ocaml (>= 5.2))
   dune
   core
-  async))
+  eio
+  eio_main))
