@@ -19,7 +19,7 @@
  (library
   (name rinha_lib)
   (libraries core async unix)
-  (modules config runtime_json time_util vectorize index))
+  (modules config runtime_json time_util vectorize index linear_model))
 
  (executable
   (public_name rinha_api)

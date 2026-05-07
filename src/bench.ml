@@ -107,9 +107,30 @@ let run_case name ~repeats requests f =
 let check_ivf_matches_vp index queries =
   let centroid_ivf_mismatches = ref 0 in
   let centroid_ivf_decision_mismatches = ref 0 in
+  let model_fraud = ref 0 in
+  let model_legit = ref 0 in
+  let model_fallback = ref 0 in
+  let model_decision_mismatches = ref 0 in
+  let model_final_decision_mismatches = ref 0 in
   Array.iteri queries ~f:(fun i query ->
     let vp = Index.score_frauds_vp index query in
     let centroid_ivf = Index.score_frauds_centroid_ivf index query in
+    let model_final =
+      match Linear_model.decide query with
+      | Fraud ->
+        incr model_fraud;
+        if vp < 3 then incr model_decision_mismatches;
+        Index.k
+      | Legit ->
+        incr model_legit;
+        if vp >= 3 then incr model_decision_mismatches;
+        0
+      | Unknown ->
+        incr model_fallback;
+        centroid_ivf
+    in
+    if not (Bool.equal (model_final >= 3) (vp >= 3))
+    then incr model_final_decision_mismatches;
     if centroid_ivf <> vp then incr centroid_ivf_mismatches;
     if not (Bool.equal (centroid_ivf >= 3) (vp >= 3))
     then incr centroid_ivf_decision_mismatches;
@@ -125,6 +146,16 @@ let check_ivf_matches_vp index queries =
     "centroid_ivf_mismatches=%d centroid_ivf_decision_mismatches=%d/%d\n%!"
     !centroid_ivf_mismatches
     !centroid_ivf_decision_mismatches
+    (Array.length queries);
+  printf
+    "linear_model fraud=%d legit=%d fallback=%d fallback_rate=%.4f \
+     direct_decision_mismatches=%d final_decision_mismatches=%d/%d\n%!"
+    !model_fraud
+    !model_legit
+    !model_fallback
+    (Float.of_int !model_fallback /. Float.of_int (Array.length queries))
+    !model_decision_mismatches
+    !model_final_decision_mismatches
     (Array.length queries);
   if !centroid_ivf_decision_mismatches = 0
   then printf "ivf_decision_correctness=ok queries=%d\n%!" (Array.length queries)

@@ -10,6 +10,7 @@ type request =
 
 and route =
   | Ready
+  | Warmup
   | Fraud_score
   | Other
 
@@ -40,6 +41,8 @@ let static_response ?connection status reason ?(content_type = "text/plain") bod
 
 let ready_response = static_response 200 "OK" "OK"
 let ready_response_close = static_response ~connection:"close" 200 "OK" "OK"
+let warmup_response = ready_response
+let warmup_response_close = ready_response_close
 
 let bad_request_response =
   static_response ~connection:"close" 400 "Bad Request" "bad request"
@@ -97,6 +100,7 @@ let starts_with line prefix =
 
 let parse_request_line line =
   if starts_with line "POST /fraud-score " then Fraud_score
+  else if starts_with line "GET /warmup " then Warmup
   else if starts_with line "GET /ready " then Ready
   else Other
 
@@ -223,11 +227,22 @@ let rec handle_connection config index state reader writer =
           ensure_warmed index;
           let response = if request.close then ready_response_close else ready_response in
           write_response_or_continue config index state reader writer request response
+        | Warmup ->
+          ensure_warmed index;
+          let response =
+            if request.close then warmup_response_close else warmup_response
+          in
+          write_response_or_continue config index state reader writer request response
         | Fraud_score ->
           (try
             ensure_warmed index;
             Vectorize.to_quantized_into config body state.query;
-            let frauds = Index.score_frauds_with_scorer index state.scorer state.query in
+            let frauds =
+              match Linear_model.decide state.query with
+              | Fraud -> Index.k
+              | Legit -> 0
+              | Unknown -> Index.score_frauds_with_scorer index state.scorer state.query
+            in
             let response =
               if request.close
               then fraud_responses_close.(frauds)

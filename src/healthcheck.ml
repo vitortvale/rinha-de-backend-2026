@@ -3,7 +3,7 @@ let socket_path =
   | Some path -> path
   | None -> "/tmp/rinha-api.sock"
 
-let request = "GET /ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+let request = "GET /warmup HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
 
 let main () =
   let fd = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in

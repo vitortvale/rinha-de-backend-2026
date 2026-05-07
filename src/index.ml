@@ -949,6 +949,14 @@ let prewarm t =
   for i = 0 to Array.length t.centroid_ivf_offsets - 1 do
     checksum := !checksum + t.centroid_ivf_offsets.(i)
   done;
+  let scorer = create_scorer t in
+  let query = Array.create ~len:Vectorize.dim 0 in
+  for seed = 0 to 63 do
+    for i = 0 to Vectorize.dim - 1 do
+      query.(i) <- ((seed * 1543) + (i * 917)) land 0x3fff
+    done;
+    checksum := !checksum + score_frauds_centroid_ivf_with_scorer t scorer query
+  done;
   Sys.opaque_identity !checksum |> ignore;
   ()
 ;;
