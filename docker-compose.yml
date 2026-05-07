@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:3c82c4e
+    image: vitortvale/rinha-2026-ocaml:bab7638
     pull_policy: always
     hostname: api1
     environment:
@@ -51,11 +51,14 @@ services:
         hard: 65535
 
   haproxy:
-    image: haproxy:2.9-alpine
+    image: vitortvale/rinha-2026-ocaml:bab7638
+    pull_policy: always
+    command: [ "/app/rinha_lb" ]
+    environment:
+      UPSTREAM_SOCKETS: /sockets/api1.sock,/sockets/api2.sock
     ports:
       - "9999:9999"
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - api-sockets:/sockets
     depends_on:
       api1:
