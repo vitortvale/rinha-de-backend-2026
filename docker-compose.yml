@@ -1,6 +1,6 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:bab7638
+    image: vitortvale/rinha-2026-ocaml:e8096c3
     pull_policy: always
     hostname: api1
     environment:
@@ -8,7 +8,6 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
-      RINHA_TRANSPORT: epoll
     volumes:
       - api-sockets:/sockets
     networks:
@@ -37,7 +36,6 @@ services:
       DATA_DIR: /app/data
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
-      RINHA_TRANSPORT: epoll
     networks:
       - rinha
     deploy:
@@ -51,14 +49,11 @@ services:
         hard: 65535
 
   haproxy:
-    image: vitortvale/rinha-2026-ocaml:bab7638
-    pull_policy: always
-    command: [ "/app/rinha_lb" ]
-    environment:
-      UPSTREAM_SOCKETS: /sockets/api1.sock,/sockets/api2.sock
+    image: haproxy:2.9-alpine
     ports:
       - "9999:9999"
     volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - api-sockets:/sockets
     depends_on:
       api1:
