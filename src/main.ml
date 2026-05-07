@@ -261,27 +261,105 @@ type epoll_client =
 
 let fd_to_int fd = Core_unix.File_descr.to_int fd
 
-let strip_trailing_cr line =
-  let len = String.length line in
-  if len > 0 && Char.equal line.[len - 1] '\r'
-  then String.sub line ~pos:0 ~len:(len - 1)
-  else line
+let bytes_lower_code bytes i =
+  let code = Char.to_int (Bytes.unsafe_get bytes i) in
+  if code >= Char.to_int 'A' && code <= Char.to_int 'Z' then code + 32 else code
 
-let parse_headers_block block =
-  match String.split block ~on:'\n' with
-  | [] -> None
-  | request_line :: headers ->
-    let route = parse_request_line (strip_trailing_cr request_line) in
-    let rec loop content_length close = function
-      | [] -> Some { route; content_length; close }
-      | line :: rest ->
-        let line = strip_trailing_cr line in
-        (match parse_header line with
-         | `Content_length content_length -> loop content_length close rest
-         | `Connection_close close_requested -> loop content_length (close || close_requested) rest
-         | `Other -> loop content_length close rest)
-    in
-    loop 0 false headers
+let bytes_starts_with bytes start stop expected =
+  let len = String.length expected in
+  start + len <= stop
+  &&
+  let rec loop i =
+    i = len
+    || (Char.equal (Bytes.unsafe_get bytes (start + i)) expected.[i] && loop (i + 1))
+  in
+  loop 0
+
+let bytes_caseless_equal_at bytes start stop expected =
+  let len = String.length expected in
+  start + len <= stop
+  &&
+  let rec loop i =
+    i = len
+    || (bytes_lower_code bytes (start + i) = Char.to_int expected.[i] && loop (i + 1))
+  in
+  loop 0
+
+let parse_request_bytes bytes start stop =
+  if bytes_starts_with bytes start stop "POST /fraud-score "
+  then Fraud_score
+  else if bytes_starts_with bytes start stop "GET /ready "
+  then Ready
+  else Other
+
+let skip_header_ws_bytes bytes i stop =
+  let rec loop i =
+    if i < stop
+       && (Char.equal (Bytes.unsafe_get bytes i) ' '
+           || Char.equal (Bytes.unsafe_get bytes i) '\t')
+    then loop (i + 1)
+    else i
+  in
+  loop i
+
+let parse_header_int_bytes bytes i stop =
+  let rec loop i acc =
+    if i < stop
+    then (
+      let c = Bytes.unsafe_get bytes i in
+      if Char.(c >= '0' && c <= '9')
+      then loop (i + 1) ((acc * 10) + Char.to_int c - Char.to_int '0')
+      else acc)
+    else acc
+  in
+  loop (skip_header_ws_bytes bytes i stop) 0
+
+let value_is_close_bytes bytes i stop =
+  let i = skip_header_ws_bytes bytes i stop in
+  i + 5 <= stop
+  && bytes_lower_code bytes i = Char.to_int 'c'
+  && bytes_lower_code bytes (i + 1) = Char.to_int 'l'
+  && bytes_lower_code bytes (i + 2) = Char.to_int 'o'
+  && bytes_lower_code bytes (i + 3) = Char.to_int 's'
+  && bytes_lower_code bytes (i + 4) = Char.to_int 'e'
+
+let find_line_end bytes start stop =
+  let rec loop i =
+    if i >= stop
+    then stop
+    else if Char.equal (Bytes.unsafe_get bytes i) '\r'
+            || Char.equal (Bytes.unsafe_get bytes i) '\n'
+    then i
+    else loop (i + 1)
+  in
+  loop start
+
+let next_header_line bytes i stop =
+  if i < stop && Char.equal (Bytes.unsafe_get bytes i) '\r'
+  then i + 2
+  else if i < stop && Char.equal (Bytes.unsafe_get bytes i) '\n'
+  then i + 1
+  else i
+
+let parse_headers_bytes bytes header_end =
+  let request_stop = find_line_end bytes 0 header_end in
+  let route = parse_request_bytes bytes 0 request_stop in
+  let rec loop i content_length close =
+    if i >= header_end
+    then Some { route; content_length; close }
+    else (
+      let line_stop = find_line_end bytes i header_end in
+      if bytes_caseless_equal_at bytes i line_stop "content-length:"
+      then loop (next_header_line bytes line_stop header_end) (parse_header_int_bytes bytes (i + 15) line_stop) close
+      else if bytes_caseless_equal_at bytes i line_stop "connection:"
+      then
+        loop
+          (next_header_line bytes line_stop header_end)
+          content_length
+          (close || value_is_close_bytes bytes (i + 11) line_stop)
+      else loop (next_header_line bytes line_stop header_end) content_length close)
+  in
+  loop (next_header_line bytes request_stop header_end) 0 false
 
 let find_headers_end bytes len =
   let rec loop i =
@@ -353,8 +431,7 @@ let process_epoll_input config index client =
       | None -> ()
       | Some header_end ->
         let header_bytes = header_end + 4 in
-        let header = Stdlib.Bytes.sub_string client.input 0 header_end in
-        (match parse_headers_block header with
+        (match parse_headers_bytes client.input header_end with
          | None -> queue_epoll_close_response client bad_request_response
          | Some request ->
            let total = header_bytes + request.content_length in

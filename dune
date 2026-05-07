@@ -34,6 +34,12 @@
   (libraries unix))
 
  (executable
+  (public_name rinha_lb)
+  (name lb)
+  (modules lb)
+  (libraries core core_unix core_unix.linux_ext unix))
+
+ (executable
   (public_name convert_references)
   (name convert_references)
   (modules convert_references)
