@@ -6,8 +6,8 @@ services:
     environment:
       TCP_PORT: "9999"
       DATA_DIR: "/app/data"
-      IVF_FAST_NPROBE: "4"
-      IVF_NPROBE: "32"
+      IVF_FAST_NPROBE: "7"
+      IVF_NPROBE: "24"
     deploy:
       resources:
         limits:
