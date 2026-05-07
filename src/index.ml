@@ -230,7 +230,7 @@ let load_index ?(with_vp = false) data_dir =
   ; centroid_ivf_total_blocks
   ; ivf_nprobe = Int.clamp_exn (int_env "IVF_NPROBE" 24) ~min:1 ~max:centroid_ivf_k
   ; ivf_fast_nprobe =
-      Int.clamp_exn (int_env "IVF_FAST_NPROBE" 4) ~min:1 ~max:centroid_ivf_k
+      Int.clamp_exn (int_env "IVF_FAST_NPROBE" 3) ~min:1 ~max:centroid_ivf_k
   }
 ;;
 
