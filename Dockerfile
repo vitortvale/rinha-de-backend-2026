@@ -26,7 +26,6 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /src/_build/install/default/bin/rinha_api /app/rinha_api
-COPY --from=build /src/_build/install/default/bin/rinha_lb /app/rinha_lb
 COPY --from=build /src/_build/install/default/bin/rinha_healthcheck /app/rinha_healthcheck
 COPY --from=build /tmp/centroid_ivf_meta.bin /app/data/centroid_ivf_meta.bin
 COPY --from=build /tmp/centroid_ivf_labels.u8 /app/data/centroid_ivf_labels.u8

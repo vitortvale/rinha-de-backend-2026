@@ -1,12 +1,10 @@
 services:
   haproxy:
-    build: .
-    command: [ "/app/rinha_lb" ]
-    environment:
-      UPSTREAM_SOCKETS: "/sockets/api1.sock,/sockets/api2.sock"
+    image: haproxy:2.9-alpine
     ports:
       - "9999:9999"
     volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - sockets:/sockets
     depends_on:
       api1:
