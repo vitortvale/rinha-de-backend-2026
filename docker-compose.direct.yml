@@ -7,7 +7,7 @@ services:
       TCP_PORT: "9999"
       DATA_DIR: "/app/data"
       IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "24"
+      IVF_NPROBE: "21"
     deploy:
       resources:
         limits:

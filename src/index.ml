@@ -786,11 +786,27 @@ let score_frauds_centroid_ivf_with_scorer t scorer query =
 ;;
 
 let score_frauds_centroid_ivf t query =
-  if Int.max t.ivf_nprobe t.ivf_fast_nprobe <= 24
+  if Int.max t.ivf_nprobe t.ivf_fast_nprobe <= 40
   then (
     let top_dist =
       stack_
         [| Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
+         ; Float.infinity
          ; Float.infinity
          ; Float.infinity
          ; Float.infinity
@@ -819,6 +835,22 @@ let score_frauds_centroid_ivf t query =
     let top_idx =
       stack_
         [| 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
+         ; 0
          ; 0
          ; 0
          ; 0

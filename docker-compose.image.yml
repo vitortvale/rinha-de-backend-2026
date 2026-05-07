@@ -27,7 +27,7 @@ services:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
       IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "24"
+      IVF_NPROBE: "21"
     volumes:
       - sockets:/sockets
     deploy:
@@ -52,7 +52,7 @@ services:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"
       IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "24"
+      IVF_NPROBE: "21"
     volumes:
       - sockets:/sockets
     deploy:
