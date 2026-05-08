@@ -17,6 +17,7 @@ PERFORMANCE_NOTES.md
 TESTING.md
 
 # Local model training artifacts. Keep weights copied into OCaml by hand.
+model/
 model/.venv/
 model/.uv-cache/
 model/*.npy
