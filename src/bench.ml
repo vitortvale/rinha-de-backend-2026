@@ -185,9 +185,19 @@ let main { data_dir; test_data; limit; repeats } =
   run_case "score_centroid_ivf" ~repeats queries (fun query ->
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
     /. Float.of_int Index.k);
-  run_case "score" ~repeats queries (fun query ->
-    Float.of_int (Index.score_frauds_with_scorer index scorer query)
-    /. Float.of_int Index.k);
+  run_case "model_decide" ~repeats queries (fun query ->
+    match Linear_model.decide query with
+    | Fraud -> 1.
+    | Legit -> 0.
+    | Unknown -> 0.5);
+  run_case "score_model" ~repeats queries (fun query ->
+    let frauds =
+      match Linear_model.decide query with
+      | Fraud -> Index.k
+      | Legit -> 0
+      | Unknown -> Index.score_frauds_with_scorer index scorer query
+    in
+    Float.of_int frauds /. Float.of_int Index.k);
   run_case "full" ~repeats requests (fun request ->
     let query = Vectorize.to_quantized config request in
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
@@ -195,7 +205,25 @@ let main { data_dir; test_data; limit; repeats } =
   run_case "full_into" ~repeats requests (fun request ->
     Vectorize.to_quantized_into config request query;
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
-    /. Float.of_int Index.k)
+    /. Float.of_int Index.k);
+  run_case "full_model_into" ~repeats requests (fun request ->
+    Vectorize.to_quantized_into config request query;
+    let frauds =
+      match Linear_model.decide query with
+      | Fraud -> Index.k
+      | Legit -> 0
+      | Unknown -> Index.score_frauds_with_scorer index scorer query
+    in
+    Float.of_int frauds /. Float.of_int Index.k);
+  run_case "full_model_alloc" ~repeats requests (fun request ->
+    let query = Vectorize.to_quantized config request in
+    let frauds =
+      match Linear_model.decide query with
+      | Fraud -> Index.k
+      | Legit -> 0
+      | Unknown -> Index.score_frauds_with_scorer index scorer query
+    in
+    Float.of_int frauds /. Float.of_int Index.k)
 ;;
 
 let usage program =
