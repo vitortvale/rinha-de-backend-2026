@@ -1,7 +1,5 @@
 # rinha-2026
 
-Nothing too fancy here.
-
 The API is written in OCaml and built with the OxCaml compiler. It scores the
 fixed contest transaction payload with a logistic regression first. When the
 linear model is not confident enough, it falls back to an IVF nearest-neighbor
