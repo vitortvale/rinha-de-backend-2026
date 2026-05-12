@@ -110,24 +110,30 @@ let check_ivf_matches_vp index queries =
   let model_fraud = ref 0 in
   let model_legit = ref 0 in
   let model_fallback = ref 0 in
+  let model_only_decision_mismatches = ref 0 in
   let model_decision_mismatches = ref 0 in
   let model_final_decision_mismatches = ref 0 in
   Array.iteri queries ~f:(fun i query ->
     let vp = Index.score_frauds_vp index query in
     let centroid_ivf = Index.score_frauds_centroid_ivf index query in
+    let frauds = Linear_model.decide query in
+    let model_only = Linear_model.decide_probability_bucket query in
+    if not (Bool.equal (model_only >= 3) (vp >= 3))
+    then incr model_only_decision_mismatches;
     let model_final =
-      match Linear_model.decide query with
-      | Fraud ->
-        incr model_fraud;
-        if vp < 3 then incr model_decision_mismatches;
-        Index.k
-      | Legit ->
-        incr model_legit;
-        if vp >= 3 then incr model_decision_mismatches;
-        0
-      | Unknown ->
+      if frauds >= 0
+      then (
+        if frauds >= 3
+        then (
+          incr model_fraud;
+          if vp < 3 then incr model_decision_mismatches)
+        else (
+          incr model_legit;
+          if vp >= 3 then incr model_decision_mismatches);
+        frauds)
+      else (
         incr model_fallback;
-        centroid_ivf
+        centroid_ivf)
     in
     if not (Bool.equal (model_final >= 3) (vp >= 3))
     then incr model_final_decision_mismatches;
@@ -149,12 +155,14 @@ let check_ivf_matches_vp index queries =
     (Array.length queries);
   printf
     "linear_model fraud=%d legit=%d fallback=%d fallback_rate=%.4f \
-     direct_decision_mismatches=%d final_decision_mismatches=%d/%d\n%!"
+     direct_decision_mismatches=%d model_only_decision_mismatches=%d \
+     final_decision_mismatches=%d/%d\n%!"
     !model_fraud
     !model_legit
     !model_fallback
     (Float.of_int !model_fallback /. Float.of_int (Array.length queries))
     !model_decision_mismatches
+    !model_only_decision_mismatches
     !model_final_decision_mismatches
     (Array.length queries);
   if !centroid_ivf_decision_mismatches = 0
@@ -186,16 +194,16 @@ let main { data_dir; test_data; limit; repeats } =
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
     /. Float.of_int Index.k);
   run_case "model_decide" ~repeats queries (fun query ->
-    match Linear_model.decide query with
-    | Fraud -> 1.
-    | Legit -> 0.
-    | Unknown -> 0.5);
+    let frauds = Linear_model.decide query in
+    if frauds >= 0 then Float.of_int frauds /. Float.of_int Index.k else 0.5);
+  run_case "model_only" ~repeats queries (fun query ->
+    Float.of_int (Linear_model.decide_probability_bucket query) /. Float.of_int Index.k);
   run_case "score_model" ~repeats queries (fun query ->
+    let frauds = Linear_model.decide query in
     let frauds =
-      match Linear_model.decide query with
-      | Fraud -> Index.k
-      | Legit -> 0
-      | Unknown -> Index.score_frauds_with_scorer index scorer query
+      if frauds >= 0
+      then frauds
+      else Index.score_frauds_with_scorer index scorer query
     in
     Float.of_int frauds /. Float.of_int Index.k);
   run_case "full" ~repeats requests (fun request ->
@@ -208,20 +216,23 @@ let main { data_dir; test_data; limit; repeats } =
     /. Float.of_int Index.k);
   run_case "full_model_into" ~repeats requests (fun request ->
     Vectorize.to_quantized_into config request query;
+    let frauds = Linear_model.decide query in
     let frauds =
-      match Linear_model.decide query with
-      | Fraud -> Index.k
-      | Legit -> 0
-      | Unknown -> Index.score_frauds_with_scorer index scorer query
+      if frauds >= 0
+      then frauds
+      else Index.score_frauds_with_scorer index scorer query
     in
     Float.of_int frauds /. Float.of_int Index.k);
+  run_case "full_model_only" ~repeats requests (fun request ->
+    Vectorize.to_quantized_into config request query;
+    Float.of_int (Linear_model.decide_probability_bucket query) /. Float.of_int Index.k);
   run_case "full_model_alloc" ~repeats requests (fun request ->
     let query = Vectorize.to_quantized config request in
+    let frauds = Linear_model.decide query in
     let frauds =
-      match Linear_model.decide query with
-      | Fraud -> Index.k
-      | Legit -> 0
-      | Unknown -> Index.score_frauds_with_scorer index scorer query
+      if frauds >= 0
+      then frauds
+      else Index.score_frauds_with_scorer index scorer query
     in
     Float.of_int frauds /. Float.of_int Index.k)
 ;;

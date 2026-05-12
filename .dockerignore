@@ -4,3 +4,13 @@ _build
 *.u16
 *.u8
 .DS_Store
+*.py
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.claire/
+.claude/

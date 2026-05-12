@@ -9,5 +9,6 @@ val score_frauds_centroid_ivf : t -> int array -> int
 type scorer
 val create_scorer : t -> scorer
 val score_frauds_with_scorer : t -> scorer -> int array -> int
+val score_frauds_with_scorer_verify : t -> scorer -> int array -> bool -> int
 val score_frauds : t -> int array -> int
 val score : t -> int array -> float
