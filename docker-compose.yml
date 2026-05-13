@@ -1,13 +1,15 @@
 services:
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:d083d68
+    image: vitortvale/rinha-2026-ocaml:89e5e42
     pull_policy: always
     hostname: api1
     environment:
       SOCKET_PATH: /sockets/api1.sock
       DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "24"
+      API_WORKERS: "4"
+      IVF_FAST_NPROBE: "6"
+      IVF_NPROBE: "13"
+      IVF_VERIFY_NPROBE: "24"
     volumes:
       - api-sockets:/sockets
     networks:
@@ -34,8 +36,10 @@ services:
     environment:
       SOCKET_PATH: /sockets/api2.sock
       DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "24"
+      API_WORKERS: "4"
+      IVF_FAST_NPROBE: "6"
+      IVF_NPROBE: "13"
+      IVF_VERIFY_NPROBE: "24"
     networks:
       - rinha
     deploy:
