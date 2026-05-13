@@ -20,7 +20,7 @@
 # Submission Topology Rule
 
 - The contest submission must run exactly two active API services plus one load balancer.
-- The load balancer must stay HAProxy. Do not switch the submission or candidate compose topology to nginx, a custom load balancer, or another proxy unless the user explicitly reverses this rule.
+- The user explicitly approved trying the custom Rust load balancer `jrblatt/so-no-forevis`. Candidate/submission experiments may replace HAProxy with that LB over the same Unix sockets. Pin the image by digest when promoting it beyond a local experiment.
 - Extra services such as a dedicated vector-search/vecdb container are experiment-only unless the user explicitly accepts the contest-topology risk. They violate the current submission topology rule, so benchmark them in separate worktrees and do not merge them into `submission` without a direct user decision.
 - Do not submit a direct single-active API topology, and do not turn `api2` into a sleeping sidecar.
 - The `submission` branch must expose port `9999` through the load balancer only.
