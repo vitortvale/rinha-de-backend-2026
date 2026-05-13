@@ -4,7 +4,9 @@
 - That builder image uses the Oxcaml compiler switch `5.2.0+ox` with `oxcaml-compiler.5.2.0minus31`.
 - Do not spend time rebuilding or changing the builder image unless the Oxcaml compiler/dependency base actually needs to change.
 - The production `Dockerfile` should keep using the prebuilt builder image as its build stage.
-- Keep the implementation pure OCaml/OxCaml; do not add C stubs or C/AVX files to this repo.
+- Keep the production implementation pure OCaml/OxCaml unless the user explicitly moves a candidate out of experiment mode.
+- Rust or Go rewrites are allowed for isolated experiments in separate branches/worktrees. They may be used to evaluate runtime, load balancer, or vector-search hypotheses, but they must not replace the submission path until the user explicitly approves that direction.
+- Do not add C stubs or C/AVX files to this repo.
 - Use Conventional Commits for commit messages, for example `feat: ...`, `fix: ...`, `perf: ...`, `chore: ...`.
 - Before opening a contest preview issue, push the repo changes and wait for the GitHub Actions image publish workflow to finish successfully.
 - Contest preview issues can use the title `rt`; the body should still contain `rinha/test OCaml`.
@@ -19,6 +21,7 @@
 
 - The contest submission must run exactly two active API services plus one load balancer.
 - The load balancer must stay HAProxy. Do not switch the submission or candidate compose topology to nginx, a custom load balancer, or another proxy unless the user explicitly reverses this rule.
+- Extra services such as a dedicated vector-search/vecdb container are experiment-only unless the user explicitly accepts the contest-topology risk. They violate the current submission topology rule, so benchmark them in separate worktrees and do not merge them into `submission` without a direct user decision.
 - Do not submit a direct single-active API topology, and do not turn `api2` into a sleeping sidecar.
 - The `submission` branch must expose port `9999` through the load balancer only.
 - `api1` and `api2` must both run the same immutable API image tag and communicate with the load balancer over the configured internal transport.
