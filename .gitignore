@@ -10,11 +10,6 @@ data/
 test/
 docs/
 .gitmodules
-AGENTS.md
-AGENT_LOG.md
-CPU.md
-PERFORMANCE_NOTES.md
-TESTING.md
 
 # Local model training artifacts. Keep weights copied into OCaml by hand.
 model/

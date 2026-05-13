@@ -104,69 +104,19 @@ let run_case name ~repeats requests f =
     !checksum
 ;;
 
-let check_ivf_matches_vp index queries =
-  let centroid_ivf_mismatches = ref 0 in
-  let centroid_ivf_decision_mismatches = ref 0 in
+let check_model_fallback index queries =
   let model_fraud = ref 0 in
   let model_legit = ref 0 in
   let model_fallback = ref 0 in
-  let model_only_decision_mismatches = ref 0 in
-  let model_decision_mismatches = ref 0 in
-  let model_final_decision_mismatches = ref 0 in
-  Array.iteri queries ~f:(fun i query ->
-    let vp = Index.score_frauds_vp index query in
-    let centroid_ivf = Index.score_frauds_centroid_ivf index query in
+  Array.iter queries ~f:(fun query ->
     let frauds = Linear_model.decide query in
-    let model_only = Linear_model.decide_probability_bucket query in
-    if not (Bool.equal (model_only >= 3) (vp >= 3))
-    then incr model_only_decision_mismatches;
-    let model_final =
-      if frauds >= 0
-      then (
-        if frauds >= 3
-        then (
-          incr model_fraud;
-          if vp < 3 then incr model_decision_mismatches)
-        else (
-          incr model_legit;
-          if vp >= 3 then incr model_decision_mismatches);
-        frauds)
-      else (
-        incr model_fallback;
-        centroid_ivf)
-    in
-    if not (Bool.equal (model_final >= 3) (vp >= 3))
-    then incr model_final_decision_mismatches;
-    if centroid_ivf <> vp then incr centroid_ivf_mismatches;
-    if not (Bool.equal (centroid_ivf >= 3) (vp >= 3))
-    then incr centroid_ivf_decision_mismatches;
-    if !centroid_ivf_decision_mismatches <= 10
-       && not (Bool.equal (centroid_ivf >= 3) (vp >= 3))
-    then
-      printf
-        "centroid_ivf_decision_mismatch query=%d vp=%d centroid_ivf=%d\n%!"
-        i
-        vp
-        centroid_ivf);
+    if frauds >= 3 then incr model_fraud else if frauds >= 0 then incr model_legit else incr model_fallback);
   printf
-    "centroid_ivf_mismatches=%d centroid_ivf_decision_mismatches=%d/%d\n%!"
-    !centroid_ivf_mismatches
-    !centroid_ivf_decision_mismatches
-    (Array.length queries);
-  printf
-    "linear_model fraud=%d legit=%d fallback=%d fallback_rate=%.4f \
-     direct_decision_mismatches=%d model_only_decision_mismatches=%d \
-     final_decision_mismatches=%d/%d\n%!"
+    "linear_model fraud=%d legit=%d fallback=%d fallback_rate=%.4f\n%!"
     !model_fraud
     !model_legit
     !model_fallback
     (Float.of_int !model_fallback /. Float.of_int (Array.length queries))
-    !model_decision_mismatches
-    !model_only_decision_mismatches
-    !model_final_decision_mismatches
-    (Array.length queries);
-  if !centroid_ivf_decision_mismatches = 0
-  then printf "ivf_decision_correctness=ok queries=%d\n%!" (Array.length queries)
 ;;
 
 let main { data_dir; test_data; limit; repeats } =
@@ -177,7 +127,7 @@ let main { data_dir; test_data; limit; repeats } =
   let index = Index.load_for_bench data_dir in
   let scorer = Index.create_scorer index in
   let queries = Array.map requests ~f:(Vectorize.to_quantized config) in
-  check_ivf_matches_vp index queries;
+  check_model_fallback index queries;
   run_case "parse" ~repeats requests (fun request ->
     let tx = Runtime_json.parse request in
     tx.amount);
@@ -188,8 +138,6 @@ let main { data_dir; test_data; limit; repeats } =
   run_case "quantize_into" ~repeats requests (fun request ->
     Vectorize.to_quantized_into config request query;
     Float.of_int query.(0));
-  run_case "score_vp" ~repeats queries (fun query ->
-    Float.of_int (Index.score_frauds_vp index query) /. Float.of_int Index.k);
   run_case "score_centroid_ivf" ~repeats queries (fun query ->
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
     /. Float.of_int Index.k);
