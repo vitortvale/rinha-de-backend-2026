@@ -22,6 +22,7 @@ type connection =
   ; mutable pos : int
   ; mutable len : int
   ; mutable output : string
+  ; mutable output_len : int
   ; mutable output_pos : int
   ; mutable close_after_write : bool
   }
@@ -217,10 +218,11 @@ let score_frauds index conn =
     else Index.score_frauds_with_scorer index conn.scorer conn.query)
 ;;
 
-let has_pending_output conn = conn.output_pos < String.length conn.output
+let has_pending_output conn = conn.output_pos < conn.output_len
 
 let set_output conn payload close_after_write =
   conn.output <- payload;
+  conn.output_len <- String.length payload;
   conn.output_pos <- 0;
   conn.close_after_write <- close_after_write
 ;;
@@ -304,7 +306,7 @@ let rec write_available conns conn =
           conn.fd
           conn.output
           conn.output_pos
-          (String.length conn.output - conn.output_pos)
+          (conn.output_len - conn.output_pos)
       in
       if written = 0
       then raise End_of_file
@@ -312,11 +314,16 @@ let rec write_available conns conn =
         conn.output_pos <- conn.output_pos + written;
         loop ()))
     else if conn.close_after_write
-    then remove_connection conns conn.fd
+    then (
+      remove_connection conns conn.fd;
+      false)
+    else true
   in
   try loop () with
-  | exn when would_block exn -> ()
-  | Unix.Unix_error _ | End_of_file -> remove_connection conns conn.fd
+  | exn when would_block exn -> true
+  | Unix.Unix_error _ | End_of_file ->
+    remove_connection conns conn.fd;
+    false
 ;;
 
 let read_available config index conns conn =
@@ -330,8 +337,8 @@ let read_available config index conns conn =
       | n ->
         conn.len <- conn.len + n;
         if not (has_pending_output conn) then process_ready_requests config index conn;
-        if has_pending_output conn then write_available conns conn;
-        if not (has_pending_output conn) then loop ())
+        let alive = if has_pending_output conn then write_available conns conn else true in
+        if alive && not (has_pending_output conn) then loop ())
   in
   try loop () with
   | exn when would_block exn -> ()
@@ -357,6 +364,7 @@ let create_connection index model_only constant_only fd =
   ; pos = 0
   ; len = 0
   ; output = ""
+  ; output_len = 0
   ; output_pos = 0
   ; close_after_write = false
   }
@@ -473,11 +481,9 @@ let main () =
       (fun fd ->
         match Hashtbl.find_opt conns fd with
         | Some conn ->
-          write_available conns conn;
-          (match Hashtbl.find_opt conns fd with
-           | Some conn when (not (has_pending_output conn)) && not conn.close_after_write ->
-             process_ready_requests config index conn
-           | _ -> ())
+          let alive = write_available conns conn in
+          if alive && (not (has_pending_output conn)) && not conn.close_after_write
+          then process_ready_requests config index conn
         | None -> ())
       writable
   done

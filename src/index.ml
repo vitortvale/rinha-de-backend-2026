@@ -996,21 +996,22 @@ let score_frauds_centroid_ivf_with_scorer_verify t scorer query verify_boundary 
       scorer.best_dist
       scorer.best_label
       query
-      top_nprobe
+      t.ivf_fast_nprobe
       t.ivf_fast_nprobe
   in
-  if fast = 0 || fast = k
+  if fast < 2 || fast > 3
   then fast
   else if t.ivf_nprobe > t.ivf_fast_nprobe
   then (
     let frauds =
-      score_frauds_centroid_ivf_continue_nprobe
+      score_frauds_centroid_ivf_nprobe_presorted
         t
+        scorer.top_dist
         scorer.top_idx
         scorer.best_dist
         scorer.best_label
         query
-        t.ivf_fast_nprobe
+        top_nprobe
         t.ivf_nprobe
     in
     if verify_boundary
@@ -1295,7 +1296,7 @@ let prewarm t =
   done;
   let scorer = create_scorer t in
   let query = Array.create ~len:Vectorize.dim 0 in
-  for seed = 0 to 63 do
+  for seed = 0 to 999 do
     for i = 0 to Vectorize.dim - 1 do
       query.(i) <- ((seed * 1543) + (i * 917)) land 0x3fff
     done;
