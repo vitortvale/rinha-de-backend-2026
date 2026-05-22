@@ -37,8 +37,8 @@ services:
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "24"
-      IVF_VERIFY_NPROBE: "40"
+      IVF_NPROBE: "64"
+      IVF_VERIFY_NPROBE: "128"
     volumes:
       - sockets:/sockets
     deploy:
@@ -66,8 +66,8 @@ services:
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "24"
-      IVF_VERIFY_NPROBE: "40"
+      IVF_NPROBE: "64"
+      IVF_VERIFY_NPROBE: "128"
     volumes:
       - sockets:/sockets
     deploy:
