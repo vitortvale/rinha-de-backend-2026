@@ -1,6 +1,6 @@
 services:
   lb:
-    image: vitortvale/rinha-2026-ocaml-lb:a2f3d4d
+    image: vitortvale/rinha-2026-ocaml-lb:3ea7f74
     pull_policy: always
     command: ["/app/rinha_lb"]
     environment:
@@ -28,7 +28,7 @@ services:
         hard: 65535
 
   api1:
-    image: vitortvale/rinha-2026-ocaml:a2f3d4d
+    image: vitortvale/rinha-2026-ocaml:3ea7f74
     pull_policy: always
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
@@ -55,7 +55,7 @@ services:
       start_period: 1s
 
   api2:
-    image: vitortvale/rinha-2026-ocaml:a2f3d4d
+    image: vitortvale/rinha-2026-ocaml:3ea7f74
     pull_policy: always
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
