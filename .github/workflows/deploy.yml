@@ -9,6 +9,7 @@ on:
 env:
   DOCKERHUB_USERNAME: vitortvale
   IMAGE_NAME: rinha-2026-ocaml
+  LB_IMAGE_NAME: rinha-2026-ocaml-lb
 
 jobs:
   publish:
@@ -34,14 +35,28 @@ jobs:
         id: tags
         run: echo "sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push image
+      - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
+          target: runtime-api
           platforms: linux/amd64
           provenance: false
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
+
+      - name: Build and push LB image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runtime-lb
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.LB_IMAGE_NAME }}:latest
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.LB_IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}

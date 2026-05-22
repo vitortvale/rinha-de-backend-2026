@@ -19,28 +19,40 @@
  (library
   (name rinha_lib)
   (libraries core unix cstruct)
-  (modules config runtime_json time_util vectorize index linear_model))
+  (modules
+   config
+   runtime_json
+   time_util
+   vectorize
+   index
+   model
+   api_http
+   api_server))
 
  (executable
   (public_name rinha_api)
+  (package rinha_2026_ocaml)
   (name main)
   (modules main)
   (libraries rinha_lib unix cstruct))
 
  (executable
   (public_name rinha_healthcheck)
+  (package rinha_2026_ocaml)
   (name healthcheck)
   (modules healthcheck)
   (libraries unix))
 
  (executable
   (public_name convert_references)
+  (package rinha_2026_ocaml)
   (name convert_references)
   (modules convert_references)
   (libraries core unix))
 
  (executable
   (public_name rinha_bench)
+  (package rinha_2026_ocaml)
   (name bench)
   (modules bench)
   (libraries rinha_lib core unix)))

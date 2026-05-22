@@ -11,3 +11,9 @@
   core
   eio
   eio_main))
+
+(package
+ (name rinha_2026_ocaml_lb)
+ (depends
+  (ocaml (>= 5.2))
+  dune))

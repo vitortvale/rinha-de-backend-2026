@@ -109,10 +109,10 @@ let check_model_fallback index queries =
   let model_legit = ref 0 in
   let model_fallback = ref 0 in
   Array.iter queries ~f:(fun query ->
-    let frauds = Linear_model.decide query in
+    let frauds = Model.decide query in
     if frauds >= 3 then incr model_fraud else if frauds >= 0 then incr model_legit else incr model_fallback);
   printf
-    "linear_model fraud=%d legit=%d fallback=%d fallback_rate=%.4f\n%!"
+    "model fraud=%d legit=%d fallback=%d fallback_rate=%.4f\n%!"
     !model_fraud
     !model_legit
     !model_fallback
@@ -142,12 +142,12 @@ let main { data_dir; test_data; limit; repeats } =
     Float.of_int (Index.score_frauds_with_scorer index scorer query)
     /. Float.of_int Index.k);
   run_case "model_decide" ~repeats queries (fun query ->
-    let frauds = Linear_model.decide query in
+    let frauds = Model.decide query in
     if frauds >= 0 then Float.of_int frauds /. Float.of_int Index.k else 0.5);
   run_case "model_only" ~repeats queries (fun query ->
-    Float.of_int (Linear_model.decide_probability_bucket query) /. Float.of_int Index.k);
+    Float.of_int (Model.decide_probability_bucket query) /. Float.of_int Index.k);
   run_case "score_model" ~repeats queries (fun query ->
-    let frauds = Linear_model.decide query in
+    let frauds = Model.decide query in
     let frauds =
       if frauds >= 0
       then frauds
@@ -164,7 +164,7 @@ let main { data_dir; test_data; limit; repeats } =
     /. Float.of_int Index.k);
   run_case "full_model_into" ~repeats requests (fun request ->
     Vectorize.to_quantized_into config request query;
-    let frauds = Linear_model.decide query in
+    let frauds = Model.decide query in
     let frauds =
       if frauds >= 0
       then frauds
@@ -173,10 +173,10 @@ let main { data_dir; test_data; limit; repeats } =
     Float.of_int frauds /. Float.of_int Index.k);
   run_case "full_model_only" ~repeats requests (fun request ->
     Vectorize.to_quantized_into config request query;
-    Float.of_int (Linear_model.decide_probability_bucket query) /. Float.of_int Index.k);
+    Float.of_int (Model.decide_probability_bucket query) /. Float.of_int Index.k);
   run_case "full_model_alloc" ~repeats requests (fun request ->
     let query = Vectorize.to_quantized config request in
-    let frauds = Linear_model.decide query in
+    let frauds = Model.decide query in
     let frauds =
       if frauds >= 0
       then frauds

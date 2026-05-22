@@ -1120,12 +1120,12 @@ let prewarm t =
   ()
 ;;
 
-let score_frauds_with_scorer_verify t _scorer query verify_boundary =
-  score_frauds_centroid_ivf_verify t query verify_boundary
+let score_frauds_with_scorer_verify t scorer query verify_boundary =
+  score_frauds_centroid_ivf_with_scorer_verify t scorer query verify_boundary
 ;;
 
-let score_frauds_with_scorer t _scorer query =
-  score_frauds_centroid_ivf t query
+let score_frauds_with_scorer t scorer query =
+  score_frauds_centroid_ivf_with_scorer t scorer query
 ;;
 ;;
 

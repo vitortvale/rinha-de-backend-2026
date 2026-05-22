@@ -1,10 +1,17 @@
 services:
-  haproxy:
-    image: haproxy:2.9-alpine
+  lb:
+    build:
+      context: .
+      target: runtime-lb
+    command: ["/app/rinha_lb"]
+    environment:
+      PORT: "9999"
+      UPSTREAMS: "/sockets/api1.sock,/sockets/api2.sock"
+      LB_WORKERS: "32"
+      BUF_SIZE: "8192"
     ports:
       - "9999:9999"
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
       - sockets:/sockets
     depends_on:
       api1:
@@ -22,7 +29,9 @@ services:
         hard: 65535
 
   api1:
-    build: .
+    build:
+      context: .
+      target: runtime-api
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
@@ -48,7 +57,9 @@ services:
       start_period: 1s
 
   api2:
-    build: .
+    build:
+      context: .
+      target: runtime-api
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"

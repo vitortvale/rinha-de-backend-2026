@@ -361,7 +361,7 @@ def main():
     parser.add_argument(
         "--output-ocaml",
         default=None,
-        help="write src/linear_model.ml-compatible OCaml for raw models",
+        help="write src/model.ml-compatible OCaml for raw models",
     )
     args = parser.parse_args()
 
