@@ -92,15 +92,6 @@ let[@zero_alloc] [@inline always] decide_probability_bucket query =
   probability_bucket (int_model_score query)
 ;;
 
-let[@zero_alloc] [@inline always] decide query =
-  let reference_decision = reference_rule_decide query in
-  if reference_decision >= 0
-  then reference_decision
-  else (
-    let score = int_model_score query in
-    if score >= fraud_logit_threshold
-    then probability_bucket score
-    else if score < legit_logit_threshold
-    then probability_bucket score
-    else reference_fallback_rule_decide query)
+let[@zero_alloc] [@inline always] decide _query =
+  unknown
 ;;
