@@ -1,17 +1,43 @@
 services:
-  api1: &api
-    image: vitortvale/rinha-2026-ocaml:110d15d
+  lb:
+    image: vitortvale/rinha-2026-ocaml-lb:a2f3d4d
     pull_policy: always
-    hostname: api1
+    command: ["/app/rinha_lb"]
     environment:
-      SOCKET_PATH: /sockets/api1.sock
-      DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "3"
+      PORT: "9999"
+      UPSTREAMS: "/sockets/api1.sock,/sockets/api2.sock"
+      LB_WORKERS: "32"
+      BUF_SIZE: "8192"
+    ports:
+      - "9999:9999"
+    volumes:
+      - sockets:/sockets
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: "32MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  api1:
+    image: vitortvale/rinha-2026-ocaml:a2f3d4d
+    pull_policy: always
+    environment:
+      SOCKET_PATH: "/sockets/api1.sock"
+      DATA_DIR: "/app/data"
+      API_WORKERS: "2"
+      IVF_FAST_NPROBE: "7"
       IVF_NPROBE: "24"
     volumes:
-      - api-sockets:/sockets
-    networks:
-      - rinha
+      - sockets:/sockets
     deploy:
       resources:
         limits:
@@ -29,15 +55,16 @@ services:
       start_period: 1s
 
   api2:
-    <<: *api
-    hostname: api2
+    image: vitortvale/rinha-2026-ocaml:a2f3d4d
+    pull_policy: always
     environment:
-      SOCKET_PATH: /sockets/api2.sock
-      DATA_DIR: /app/data
-      IVF_FAST_NPROBE: "3"
+      SOCKET_PATH: "/sockets/api2.sock"
+      DATA_DIR: "/app/data"
+      API_WORKERS: "2"
+      IVF_FAST_NPROBE: "7"
       IVF_NPROBE: "24"
-    networks:
-      - rinha
+    volumes:
+      - sockets:/sockets
     deploy:
       resources:
         limits:
@@ -47,34 +74,12 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-
-  haproxy:
-    image: haproxy:2.9-alpine
-    ports:
-      - "9999:9999"
-    volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
-      - api-sockets:/sockets
-    depends_on:
-      api1:
-        condition: service_healthy
-      api2:
-        condition: service_healthy
-    networks:
-      - rinha
-    deploy:
-      resources:
-        limits:
-          cpus: "0.20"
-          memory: "32MB"
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-
-networks:
-  rinha:
-    driver: bridge
+    healthcheck:
+      test: [ "CMD", "/app/rinha_healthcheck" ]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 1s
 
 volumes:
-  api-sockets:
+  sockets:
