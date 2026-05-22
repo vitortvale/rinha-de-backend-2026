@@ -1,0 +1,6 @@
+(executable
+ (public_name rinha_lb)
+ (package rinha_2026_ocaml_lb)
+ (name main)
+ (modules main)
+ (libraries unix))

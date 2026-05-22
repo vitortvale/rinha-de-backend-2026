@@ -5,7 +5,7 @@
 - Do not spend time rebuilding or changing the builder image unless the Oxcaml compiler/dependency base actually needs to change.
 - The production `Dockerfile` should keep using the prebuilt builder image as its build stage.
 - Keep the production implementation pure OCaml/OxCaml unless the user explicitly moves a candidate out of experiment mode.
-- Rust or Go rewrites are allowed for isolated experiments in separate branches/worktrees. They may be used to evaluate runtime, load balancer, or vector-search hypotheses, but they must not replace the submission path until the user explicitly approves that direction.
+- Alternate-language rewrites are allowed only for isolated experiments in separate branches/worktrees. They may be used to evaluate runtime, load balancer, or vector-search hypotheses, but they must not replace the submission path until the user explicitly approves that direction.
 - Do not add C stubs or C/AVX files to this repo.
 - Use Conventional Commits for commit messages, for example `feat: ...`, `fix: ...`, `perf: ...`, `chore: ...`.
 - Before opening a contest preview issue, push the repo changes and wait for the GitHub Actions image publish workflow to finish successfully.
@@ -20,7 +20,7 @@
 # Submission Topology Rule
 
 - The contest submission must run exactly two active API services plus one load balancer.
-- The user explicitly approved trying the custom Rust load balancer `jrblatt/so-no-forevis`. Candidate/submission experiments may replace HAProxy with that LB over the same Unix sockets. Pin the image by digest when promoting it beyond a local experiment.
+- Candidate/submission experiments may replace HAProxy with an external load balancer over the same Unix sockets only after direct user approval. Pin the image by digest when promoting it beyond a local experiment.
 - Extra services such as a dedicated vector-search/vecdb container are experiment-only unless the user explicitly accepts the contest-topology risk. They violate the current submission topology rule, so benchmark them in separate worktrees and do not merge them into `submission` without a direct user decision.
 - Do not submit a direct single-active API topology, and do not turn `api2` into a sleeping sidecar.
 - The `submission` branch must expose port `9999` through the load balancer only.
