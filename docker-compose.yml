@@ -38,6 +38,7 @@ services:
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "7"
       IVF_NPROBE: "24"
+      IVF_VERIFY_NPROBE: "40"
     volumes:
       - sockets:/sockets
     deploy:
@@ -66,6 +67,7 @@ services:
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "7"
       IVF_NPROBE: "24"
+      IVF_VERIFY_NPROBE: "40"
     volumes:
       - sockets:/sockets
     deploy:

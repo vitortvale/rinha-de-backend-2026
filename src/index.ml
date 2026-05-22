@@ -175,6 +175,10 @@ let[@zero_alloc] [@inline always] frauds_of_labels (best_label @ local) =
   best_label.(0) + best_label.(1) + best_label.(2) + best_label.(3) + best_label.(4)
 ;;
 
+let[@zero_alloc] [@inline always] should_verify_boundary frauds (best_label @ local) =
+  (frauds = 3 && best_label.(4) = 1) || (frauds = 2 && best_label.(4) = 0)
+;;
+
 let centroid_ivf_centroids_base = 16
 
 let centroid_ivf_offsets_base t =
@@ -822,7 +826,7 @@ let score_frauds_centroid_ivf_with_scorer_verify t scorer query verify_boundary 
   let top_nprobe =
     if verify_boundary then Int.max t.ivf_verify_nprobe t.ivf_nprobe else t.ivf_nprobe
   in
-  let fast =
+  let frauds =
     score_frauds_centroid_ivf_nprobe_presorted
       t
       scorer.top_dist
@@ -830,47 +834,22 @@ let score_frauds_centroid_ivf_with_scorer_verify t scorer query verify_boundary 
       scorer.best_dist
       scorer.best_label
       query
-      t.ivf_fast_nprobe
-      t.ivf_fast_nprobe
+      top_nprobe
+      t.ivf_nprobe
   in
-  if fast < 2 || fast > 3
-  then fast
-  else if t.ivf_nprobe > t.ivf_fast_nprobe
-  then (
-    let frauds =
-      score_frauds_centroid_ivf_nprobe_presorted
-        t
-        scorer.top_dist
-        scorer.top_idx
-        scorer.best_dist
-        scorer.best_label
-        query
-        top_nprobe
-        t.ivf_nprobe
-    in
-    if verify_boundary
-       && frauds = 3
-       && scorer.best_label.(4) = 1
-       && t.ivf_verify_nprobe > t.ivf_nprobe
-    then
-      score_frauds_centroid_ivf_continue_nprobe
-        t
-        scorer.top_idx
-        scorer.best_dist
-        scorer.best_label
-        query
-        t.ivf_nprobe
-        t.ivf_verify_nprobe
-    else frauds)
-  else
-    score_frauds_centroid_ivf_nprobe
+  if verify_boundary
+     && should_verify_boundary frauds scorer.best_label
+     && t.ivf_verify_nprobe > t.ivf_nprobe
+  then
+    score_frauds_centroid_ivf_continue_nprobe
       t
-      scorer.top_dist
       scorer.top_idx
       scorer.best_dist
       scorer.best_label
       query
       t.ivf_nprobe
+      t.ivf_verify_nprobe
+  else frauds
 ;;
 
 let score_frauds_centroid_ivf_with_scorer t scorer query =
@@ -1054,8 +1033,7 @@ let score_frauds_centroid_ivf_verify t query verify_boundary =
       done;
       let frauds = frauds_of_labels best_label in
       if verify_boundary
-         && frauds = 3
-         && best_label.(4) = 1
+         && should_verify_boundary frauds best_label
          && t.ivf_verify_nprobe > t.ivf_nprobe
       then (
         for i = t.ivf_nprobe to t.ivf_verify_nprobe - 1 do
