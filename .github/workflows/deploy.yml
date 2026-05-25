@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - main
-      - ocaml
+      - cpp
 
 env:
   DOCKERHUB_USERNAME: vitortvale
-  IMAGE_NAME: rinha-2026-ocaml
-  LB_IMAGE_NAME: rinha-2026-ocaml-lb
+  IMAGE_NAME: rinha-2026-cpp
+  LB_IMAGE_NAME: rinha-2026-cpp-lb
 
 jobs:
   publish:
