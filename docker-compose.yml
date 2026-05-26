@@ -36,7 +36,7 @@ services:
       SOCKET_PATH: "/sockets/api1.sock"
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
+      IVF_FAST_NPROBE: "80"
       IVF_NPROBE: "80"
       IVF_VERIFY_NPROBE: "160"
     volumes:
@@ -65,7 +65,7 @@ services:
       SOCKET_PATH: "/sockets/api2.sock"
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
+      IVF_FAST_NPROBE: "80"
       IVF_NPROBE: "80"
       IVF_VERIFY_NPROBE: "160"
     volumes:

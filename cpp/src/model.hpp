@@ -5,8 +5,8 @@
 namespace rinha::model {
 
 inline constexpr int unknown = -1;
-inline constexpr std::int64_t threshold_low = -888040157230LL;
-inline constexpr std::int64_t threshold_high = 1030501512262LL;
+inline constexpr std::int64_t threshold_low = -9000000000000000000LL;
+inline constexpr std::int64_t threshold_high = 1204176005622LL;
 
 inline std::int64_t svm_score(const vectorize::query& q) {
   std::int64_t acc = -12942553174285LL;
@@ -143,19 +143,8 @@ inline int decide(const vectorize::query& q) {
   return unknown;
 }
 
-inline int temporary_rule_fallback(const vectorize::query& q) {
-  if (q[2] <= 10803) {
-    return 2;
-  }
-  if (q[3] <= 12174 || q[13] <= 10049) {
-    return 3;
-  }
-  return 2;
-}
-
 inline int score_frauds(const vectorize::query& q) {
-  const auto direct = decide(q);
-  return direct >= 0 ? direct : temporary_rule_fallback(q);
+  return decide(q);
 }
 
 }  // namespace rinha::model

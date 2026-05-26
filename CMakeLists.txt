@@ -9,6 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(
   -O3
   -march=x86-64-v3
+  -mavx2
+  -mfma
   -fno-exceptions
   -fno-rtti
   -Wall

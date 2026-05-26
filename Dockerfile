@@ -15,7 +15,7 @@ RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 FROM debian:12-slim AS runtime-deps
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates gzip \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -30,8 +30,11 @@ FROM runtime-deps AS runtime-api
 
 COPY --from=build /build/rinha_api /app/rinha_api
 COPY --from=build /build/rinha_healthcheck /app/rinha_healthcheck
+COPY resources/centroid_ivf_index.bin.gz /app/data/centroid_ivf_index.bin.gz
 COPY resources/mcc_risk.json /app/data/mcc_risk.json
 COPY resources/normalization.json /app/data/normalization.json
+RUN gzip -dc /app/data/centroid_ivf_index.bin.gz > /app/data/centroid_ivf_index.bin \
+ && rm /app/data/centroid_ivf_index.bin.gz
 
 ENV SOCKET_PATH=/tmp/rinha-api.sock DATA_DIR=/app/data
 CMD ["/app/rinha_api"]
