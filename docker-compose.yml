@@ -1,44 +1,17 @@
 services:
-  lb:
-    image: vitortvale/rinha-2026-ocaml-lb:16fde8d
+  api1: &api
+    image: vitortvale/rinha-2026-ocaml:110d15d
     pull_policy: always
-    command: ["/app/rinha_lb"]
+    hostname: api1
     environment:
-      PORT: "9999"
-      UPSTREAMS: "/sockets/api1.sock,/sockets/api2.sock"
-      LB_WORKERS: "32"
-      BUF_SIZE: "8192"
-    ports:
-      - "9999:9999"
+      SOCKET_PATH: /sockets/api1.sock
+      DATA_DIR: /app/data
+      IVF_FAST_NPROBE: "3"
+      IVF_NPROBE: "24"
     volumes:
-      - sockets:/sockets
-    depends_on:
-      api1:
-        condition: service_healthy
-      api2:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.20"
-          memory: "32MB"
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-
-  api1:
-    image: vitortvale/rinha-2026-ocaml:16fde8d
-    pull_policy: always
-    environment:
-      SOCKET_PATH: "/sockets/api1.sock"
-      DATA_DIR: "/app/data"
-      API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "80"
-      IVF_VERIFY_NPROBE: "160"
-    volumes:
-      - sockets:/sockets
+      - api-sockets:/sockets
+    networks:
+      - rinha
     deploy:
       resources:
         limits:
@@ -56,17 +29,15 @@ services:
       start_period: 1s
 
   api2:
-    image: vitortvale/rinha-2026-ocaml:16fde8d
-    pull_policy: always
+    <<: *api
+    hostname: api2
     environment:
-      SOCKET_PATH: "/sockets/api2.sock"
-      DATA_DIR: "/app/data"
-      API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "80"
-      IVF_VERIFY_NPROBE: "160"
-    volumes:
-      - sockets:/sockets
+      SOCKET_PATH: /sockets/api2.sock
+      DATA_DIR: /app/data
+      IVF_FAST_NPROBE: "3"
+      IVF_NPROBE: "24"
+    networks:
+      - rinha
     deploy:
       resources:
         limits:
@@ -76,12 +47,34 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-    healthcheck:
-      test: [ "CMD", "/app/rinha_healthcheck" ]
-      interval: 5s
-      timeout: 2s
-      retries: 12
-      start_period: 1s
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
+      - api-sockets:/sockets
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+    networks:
+      - rinha
+    deploy:
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: "32MB"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+networks:
+  rinha:
+    driver: bridge
 
 volumes:
-  sockets:
+  api-sockets:
