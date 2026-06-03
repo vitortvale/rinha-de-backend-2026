@@ -53,14 +53,6 @@ let main () =
   let health_server =
     Api_server.listen socket_path (Option.map int_of_string (Sys.getenv_opt "TCP_PORT"))
   in
-  let fd_socket_path =
-    match Sys.getenv_opt "FD_SOCKET_PATH" with
-    | Some p -> p
-    | None ->
-      (* Derive from SOCKET_PATH: /sockets/api1.sock → /sockets/api1.fd.sock *)
-      socket_path ^ ".fd"
-  in
-  let fd_socket = Fd_pass.create_recv_fd_socket fd_socket_path in
   let env =
     { Api_server.config = config
     ; index
@@ -68,19 +60,24 @@ let main () =
     ; constant_only = bool_env "CONSTANT_ONLY"
     }
   in
-  let parent_pid = Unix.getpid () in
-  fork_workers (int_env "API_WORKERS" 1);
-  if Unix.getpid () = parent_pid
-  then
-    (* Parent: handles Docker health checks (GET /warmup) via select on the
-       Unix socket, and drains overflow fds when idle. *)
-    Api_server.health_check_loop env health_server fd_socket
-  else begin
-    (* Forked workers: pure blocking recv_fd — no select(2) overhead.
-       The kernel guarantees each datagram goes to exactly one waiter. *)
-    (try Unix.close health_server with _ -> ());
-    Api_server.fd_worker_loop env fd_socket
-  end
+  match Sys.getenv_opt "FD_SOCKET_PATH" with
+  | None ->
+    (* Traditional mode: haproxy topology.  All forked workers compete for
+       accept(2) on the shared unix socket — per-request load balancing. *)
+    fork_workers (int_env "API_WORKERS" 1);
+    Api_server.traditional_worker_loop env health_server
+  | Some fd_socket_path ->
+    (* fd-passing mode: OCaml LB topology.  Parent handles health checks;
+       forked children do pure blocking recv_fd on the shared DGRAM socket. *)
+    let fd_socket = Fd_pass.create_recv_fd_socket fd_socket_path in
+    let parent_pid = Unix.getpid () in
+    fork_workers (int_env "API_WORKERS" 1);
+    if Unix.getpid () = parent_pid
+    then Api_server.health_check_loop env health_server fd_socket
+    else begin
+      (try Unix.close health_server with _ -> ());
+      Api_server.fd_worker_loop env fd_socket
+    end
 ;;
 
 let () = main ()

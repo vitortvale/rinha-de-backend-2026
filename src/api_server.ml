@@ -8,7 +8,6 @@ type env =
 type worker =
   { input : bytes
   ; query : int array
-  ; scorer : Index.scorer
   }
 
 let input_size = 8192
@@ -62,16 +61,16 @@ let read_request fd buf =
   read_headers 0
 ;;
 
-let[@inline always] score_frauds model_only index scorer query =
+(* Use the stack-based scoring path: it sorts top_nprobe centroids once,
+   then fast-exits after fast_nprobe probes for clear cases (0 or k/k
+   fraud neighbors), and only scans the full nprobe for ambiguous cases.
+   No per-request heap allocation; stack arrays are reused by the runtime. *)
+let[@inline always] score_frauds model_only index query =
   if model_only
   then Model.decide_probability_bucket query
   else (
     let frauds = Model.decide query in
-    if frauds >= 0
-    then frauds
-    else (
-      let frauds = Index.score_frauds_with_scorer index scorer query in
-      frauds))
+    if frauds >= 0 then frauds else Index.score_frauds index query)
 ;;
 
 let handle_request env worker request =
@@ -90,7 +89,7 @@ let handle_request env worker request =
           request.body_start
           request.content_length
           query;
-        score_frauds env.model_only env.index worker.scorer query)
+        score_frauds env.model_only env.index query)
     in
     Api_http.fraud_responses.(frauds)
 ;;
@@ -108,11 +107,8 @@ let handle_client env worker fd =
   | _ -> close_quietly fd
 ;;
 
-let create_worker index =
-  { input = Bytes.create input_size
-  ; query = Array.make Vectorize.dim 0
-  ; scorer = Index.create_scorer index
-  }
+let create_worker _index =
+  { input = Bytes.create input_size; query = Array.make Vectorize.dim 0 }
 ;;
 
 (* Health-check only loop for the parent process.  Responds to GET /warmup
@@ -138,6 +134,23 @@ let health_check_loop env health_server fd_socket =
              | Some fd -> handle_client env worker fd
              | None -> ()))
          ready
+     with
+     | Unix.Unix_error _ -> ())
+  done
+;;
+
+(* Traditional unix-socket accept loop (haproxy topology).  Each forked
+   worker competes for accept(2) on the shared unix socket — natural
+   per-request load balancing with no fd-passing overhead. *)
+let traditional_worker_loop env server =
+  let worker = create_worker env.index in
+  while true do
+    (try
+       let fd, addr = Unix.accept server in
+       (match addr with
+        | Unix.ADDR_INET _ -> (try Unix.setsockopt fd Unix.TCP_NODELAY true with _ -> ())
+        | Unix.ADDR_UNIX _ -> ());
+       handle_client env worker fd
      with
      | Unix.Unix_error _ -> ())
   done
