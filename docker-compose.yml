@@ -35,9 +35,10 @@ services:
       SOCKET_PATH: "/sockets/api1.sock"
       FD_SOCKET_PATH: "/sockets/api1.fd.sock"
       DATA_DIR: "/app/data"
-      API_WORKERS: "2"
+      API_WORKERS: "3"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
+      OCAMLRUNPARAM: "s=128M,o=400"
     volumes:
       - sockets:/sockets
     deploy:
@@ -64,9 +65,10 @@ services:
       SOCKET_PATH: "/sockets/api2.sock"
       FD_SOCKET_PATH: "/sockets/api2.fd.sock"
       DATA_DIR: "/app/data"
-      API_WORKERS: "2"
+      API_WORKERS: "3"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
+      OCAMLRUNPARAM: "s=128M,o=400"
     volumes:
       - sockets:/sockets
     deploy:
