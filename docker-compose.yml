@@ -1,6 +1,6 @@
 services:
   lb:
-    image: vitortvale/rinha-2026-ocaml-lb:58b2693
+    image: vitortvale/rinha-2026-ocaml-lb:664a423
     pull_policy: always
     command: ["/app/rinha_lb"]
     environment:
@@ -28,7 +28,7 @@ services:
         hard: 65535
 
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:58b2693
+    image: vitortvale/rinha-2026-ocaml:664a423
     pull_policy: always
     hostname: api1
     environment:
