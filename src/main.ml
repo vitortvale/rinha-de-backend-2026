@@ -68,8 +68,19 @@ let main () =
     ; constant_only = bool_env "CONSTANT_ONLY"
     }
   in
+  let parent_pid = Unix.getpid () in
   fork_workers (int_env "API_WORKERS" 1);
-  Api_server.worker_loop env health_server fd_socket
+  if Unix.getpid () = parent_pid
+  then
+    (* Parent: handles Docker health checks (GET /warmup) via select on the
+       Unix socket, and drains overflow fds when idle. *)
+    Api_server.health_check_loop env health_server fd_socket
+  else begin
+    (* Forked workers: pure blocking recv_fd — no select(2) overhead.
+       The kernel guarantees each datagram goes to exactly one waiter. *)
+    (try Unix.close health_server with _ -> ());
+    Api_server.fd_worker_loop env fd_socket
+  end
 ;;
 
 let () = main ()

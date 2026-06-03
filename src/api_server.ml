@@ -115,25 +115,15 @@ let create_worker index =
   }
 ;;
 
-(*
- * Dual-mode worker loop.
- *
- * fd_socket — DGRAM Unix socket that receives client file descriptors from the
- *             OCaml LB via SCM_RIGHTS.  All forked API workers share the same
- *             socket; the kernel delivers each datagram to exactly one waiter.
- *
- * health_server — the original Unix STREAM socket used exclusively by the
- *                 Docker health-check binary (GET /warmup).
- *
- * select(2) multiplexes between the two so health checks still work while the
- * bulk of traffic arrives as forwarded fds.
- *)
-let worker_loop env health_server fd_socket =
+(* Health-check only loop for the parent process.  Responds to GET /warmup
+   so Docker considers the container healthy.  Runs select with a short
+   timeout so it can also drain any excess client fds when idle. *)
+let health_check_loop env health_server fd_socket =
   let worker = create_worker env.index in
   let watch = [ health_server; fd_socket ] in
   while true do
     (try
-       let ready, _, _ = Unix.select watch [] [] (-1.0) in
+       let ready, _, _ = Unix.select watch [] [] 5.0 in
        List.iter
          (fun rfd ->
            if rfd = health_server
@@ -144,12 +134,25 @@ let worker_loop env health_server fd_socket =
              with
              | Unix.Unix_error _ -> ())
            else (
-             (* Non-blocking: if another worker raced ahead and consumed the
-                datagram, recv_fd_nonblock returns -1 and we loop back. *)
-             (match Fd_pass.recv_fd_nonblock fd_socket with
-              | Some fd -> handle_client env worker fd
-              | None -> ())))
+             match Fd_pass.recv_fd_nonblock fd_socket with
+             | Some fd -> handle_client env worker fd
+             | None -> ()))
          ready
+     with
+     | Unix.Unix_error _ -> ())
+  done
+;;
+
+(* Pure fd-receiver loop for forked worker processes.  Blocking recvmsg
+   on a shared DGRAM socket: the kernel delivers each datagram to exactly
+   one waiting process, so there is no thundering-herd and no select(2)
+   overhead on the hot path. *)
+let fd_worker_loop env fd_socket =
+  let worker = create_worker env.index in
+  while true do
+    (try
+       let fd = Fd_pass.recv_fd fd_socket in
+       handle_client env worker fd
      with
      | Unix.Unix_error _ -> ())
   done

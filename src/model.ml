@@ -92,6 +92,4 @@ let[@zero_alloc] [@inline always] decide_probability_bucket query =
   probability_bucket (int_model_score query)
 ;;
 
-let[@zero_alloc] [@inline always] decide _query =
-  unknown
-;;
+let[@zero_alloc] [@inline always] decide _query = unknown
