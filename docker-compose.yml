@@ -1,6 +1,6 @@
 services:
   lb:
-    image: vitortvale/rinha-2026-ocaml-lb:d62b4f9
+    image: vitortvale/rinha-2026-ocaml-lb:58b2693
     pull_policy: always
     command: ["/app/rinha_lb"]
     environment:
@@ -28,17 +28,17 @@ services:
         hard: 65535
 
   api1: &api
-    image: vitortvale/rinha-2026-ocaml:d62b4f9
+    image: vitortvale/rinha-2026-ocaml:58b2693
     pull_policy: always
     hostname: api1
     environment:
       SOCKET_PATH: /sockets/api1.sock
       FD_SOCKET_PATH: /sockets/api1.fd.sock
       DATA_DIR: /app/data
-      API_WORKERS: "3"
+      API_WORKERS: "2"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
-      OCAMLRUNPARAM: "s=128M,o=400"
+      OCAMLRUNPARAM: "s=8M,o=300"
     volumes:
       - sockets:/sockets
     networks:
@@ -66,10 +66,10 @@ services:
       SOCKET_PATH: /sockets/api2.sock
       FD_SOCKET_PATH: /sockets/api2.fd.sock
       DATA_DIR: /app/data
-      API_WORKERS: "3"
+      API_WORKERS: "2"
       IVF_FAST_NPROBE: "3"
       IVF_NPROBE: "24"
-      OCAMLRUNPARAM: "s=128M,o=400"
+      OCAMLRUNPARAM: "s=8M,o=300"
 
 networks:
   rinha:
