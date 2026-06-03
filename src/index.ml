@@ -1007,7 +1007,11 @@ let score_frauds_centroid_ivf_verify t query verify_boundary =
         q13
     done;
     let fast = frauds_of_labels best_label in
-    if fast = 0 || fast = k || t.ivf_fast_nprobe >= t.ivf_nprobe
+    (* Only fast-exit for the clearly-legit case (no fraud neighbors found in
+       the fast probes).  Do NOT fast-exit for fast=k: 3-probe fraud density
+       is not reliable enough — the true kNN across all nprobe clusters may
+       contain fewer frauds, causing false positives on legitimate transactions. *)
+    if fast = 0 || t.ivf_fast_nprobe >= t.ivf_nprobe
     then fast
     else (
       for i = t.ivf_fast_nprobe to t.ivf_nprobe - 1 do
