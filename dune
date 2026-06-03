@@ -19,6 +19,7 @@
  (library
   (name rinha_lib)
   (libraries core unix cstruct)
+  (foreign_stubs (language c) (names recvfd))
   (modules
    config
    runtime_json
@@ -27,7 +28,8 @@
    index
    model
    api_http
-   api_server))
+   api_server
+   fd_pass))
 
  (executable
   (public_name rinha_api)

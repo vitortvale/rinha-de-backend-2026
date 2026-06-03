@@ -6,9 +6,8 @@ services:
     command: ["/app/rinha_lb"]
     environment:
       PORT: "9999"
-      UPSTREAMS: "/sockets/api1.sock,/sockets/api2.sock"
+      UPSTREAMS: "/sockets/api1.fd.sock,/sockets/api2.fd.sock"
       LB_WORKERS: "32"
-      BUF_SIZE: "8192"
     ports:
       - "9999:9999"
     volumes:
@@ -34,11 +33,11 @@ services:
       target: runtime-api
     environment:
       SOCKET_PATH: "/sockets/api1.sock"
+      FD_SOCKET_PATH: "/sockets/api1.fd.sock"
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "80"
-      IVF_VERIFY_NPROBE: "160"
+      IVF_FAST_NPROBE: "3"
+      IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:
@@ -63,11 +62,11 @@ services:
       target: runtime-api
     environment:
       SOCKET_PATH: "/sockets/api2.sock"
+      FD_SOCKET_PATH: "/sockets/api2.fd.sock"
       DATA_DIR: "/app/data"
       API_WORKERS: "2"
-      IVF_FAST_NPROBE: "7"
-      IVF_NPROBE: "80"
-      IVF_VERIFY_NPROBE: "160"
+      IVF_FAST_NPROBE: "3"
+      IVF_NPROBE: "24"
     volumes:
       - sockets:/sockets
     deploy:

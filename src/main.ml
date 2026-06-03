@@ -50,9 +50,17 @@ let main () =
   let config = Config.load data_dir in
   let index = Index.load data_dir in
   ensure_warmed index;
-  let server =
+  let health_server =
     Api_server.listen socket_path (Option.map int_of_string (Sys.getenv_opt "TCP_PORT"))
   in
+  let fd_socket_path =
+    match Sys.getenv_opt "FD_SOCKET_PATH" with
+    | Some p -> p
+    | None ->
+      (* Derive from SOCKET_PATH: /sockets/api1.sock → /sockets/api1.fd.sock *)
+      socket_path ^ ".fd"
+  in
+  let fd_socket = Fd_pass.create_recv_fd_socket fd_socket_path in
   let env =
     { Api_server.config = config
     ; index
@@ -61,7 +69,7 @@ let main () =
     }
   in
   fork_workers (int_env "API_WORKERS" 1);
-  Api_server.worker_loop env server
+  Api_server.worker_loop env health_server fd_socket
 ;;
 
 let () = main ()

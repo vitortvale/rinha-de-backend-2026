@@ -1,0 +1,17 @@
+(lang dune 3.11)
+
+(env
+ (release
+  (ocamlopt_flags
+   (:standard
+    -O3
+    -rounds
+    2
+    -unbox-closures
+    -unsafe
+    -llvm-flags
+    "-march=haswell -mtune=haswell"
+    -flambda2-result-types-all-functions
+    -flambda2-join-points
+    -zero-alloc-check
+    default))))

@@ -115,20 +115,43 @@ let create_worker index =
   }
 ;;
 
-let worker_loop env server =
+(*
+ * Dual-mode worker loop.
+ *
+ * fd_socket — DGRAM Unix socket that receives client file descriptors from the
+ *             OCaml LB via SCM_RIGHTS.  All forked API workers share the same
+ *             socket; the kernel delivers each datagram to exactly one waiter.
+ *
+ * health_server — the original Unix STREAM socket used exclusively by the
+ *                 Docker health-check binary (GET /warmup).
+ *
+ * select(2) multiplexes between the two so health checks still work while the
+ * bulk of traffic arrives as forwarded fds.
+ *)
+let worker_loop env health_server fd_socket =
   let worker = create_worker env.index in
+  let watch = [ health_server; fd_socket ] in
   while true do
-    try
-      let fd, addr = Unix.accept server in
-      (match addr with
-       | Unix.ADDR_INET _ ->
-         (try Unix.setsockopt fd Unix.TCP_NODELAY true with
-          | _ -> ())
-       | Unix.ADDR_UNIX _ -> ());
-      handle_client env worker fd
-    with
-    | exn when would_block exn -> ()
-    | Unix.Unix_error _ -> ()
+    (try
+       let ready, _, _ = Unix.select watch [] [] (-1.0) in
+       List.iter
+         (fun rfd ->
+           if rfd = health_server
+           then (
+             try
+               let fd, _ = Unix.accept health_server in
+               handle_client env worker fd
+             with
+             | Unix.Unix_error _ -> ())
+           else (
+             (* Non-blocking: if another worker raced ahead and consumed the
+                datagram, recv_fd_nonblock returns -1 and we loop back. *)
+             (match Fd_pass.recv_fd_nonblock fd_socket with
+              | Some fd -> handle_client env worker fd
+              | None -> ())))
+         ready
+     with
+     | Unix.Unix_error _ -> ())
   done
 ;;
 

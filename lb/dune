@@ -2,5 +2,6 @@
  (public_name rinha_lb)
  (package rinha_2026_ocaml_lb)
  (name main)
- (modules main)
+ (modules main fd_pass)
+ (foreign_stubs (language c) (names sendfd))
  (libraries unix))

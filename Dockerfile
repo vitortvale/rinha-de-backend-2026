@@ -3,8 +3,7 @@ FROM ${BUILDER_IMAGE} AS build
 
 WORKDIR /src
 
-COPY --chown=opam:opam dune dune-project rinha_2026_ocaml.opam rinha_2026_ocaml_lb.opam ./
-COPY --chown=opam:opam lb ./lb
+COPY --chown=opam:opam dune dune-project rinha_2026_ocaml.opam ./
 COPY --chown=opam:opam src ./src
 COPY --chown=opam:opam resources ./resources
 
@@ -15,10 +14,15 @@ RUN eval $(opam env --switch=5.2.0+ox) \
  && gzip -cd resources/centroid_ivf_index.bin.gz > /tmp/centroid_ivf_index.bin \
  && _build/install/default/bin/convert_references split-ivf /tmp/centroid_ivf_index.bin /tmp/centroid_ivf_meta.bin /tmp/centroid_ivf_labels.u8 /tmp/centroid_ivf_blocks.i16
 
-FROM build AS lb-build
+FROM ${BUILDER_IMAGE} AS lb-build
+
+WORKDIR /src/lb
+
+COPY --chown=opam:opam lb/dune-workspace lb/dune-project lb/rinha_2026_ocaml_lb.opam ./
+COPY --chown=opam:opam lb/dune lb/main.ml lb/fd_pass.ml lb/sendfd.c ./
 
 RUN eval $(opam env --switch=5.2.0+ox) \
- && dune build --profile release --only-packages rinha_2026_ocaml_lb @install
+ && dune build --profile release @install
 
 FROM debian:12-slim AS runtime-deps
 
@@ -30,8 +34,8 @@ WORKDIR /app
 
 FROM runtime-deps AS runtime-lb
 
-COPY --from=lb-build /src/_build/install/default/bin/rinha_lb /app/rinha_lb
-ENV PORT=9999 UPSTREAMS=/sockets/api1.sock,/sockets/api2.sock LB_WORKERS=32 BUF_SIZE=8192 OCAMLRUNPARAM=s=2M,o=120
+COPY --from=lb-build /src/lb/_build/install/default/bin/rinha_lb /app/rinha_lb
+ENV PORT=9999 UPSTREAMS=/sockets/api1.fd.sock,/sockets/api2.fd.sock LB_WORKERS=32 OCAMLRUNPARAM=s=2M,o=120
 CMD ["/app/rinha_lb"]
 
 FROM runtime-deps AS runtime-api
