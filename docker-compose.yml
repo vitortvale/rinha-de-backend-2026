@@ -37,7 +37,7 @@ services:
       DATA_DIR: /app/data
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "32"
+      IVF_NPROBE: "48"
       OCAMLRUNPARAM: "s=8M,o=300"
     volumes:
       - sockets:/sockets
@@ -68,7 +68,7 @@ services:
       DATA_DIR: /app/data
       API_WORKERS: "2"
       IVF_FAST_NPROBE: "3"
-      IVF_NPROBE: "32"
+      IVF_NPROBE: "48"
       OCAMLRUNPARAM: "s=8M,o=300"
 
 networks:
